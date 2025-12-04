@@ -1,0 +1,56 @@
+# ========================================
+# Assistente Pessoal Inteligente
+# ========================================
+
+# Interfaces
+python-telegram-bot>=20.0
+twilio>=8.0.0
+
+# NLP e IA
+spacy>=3.5.0
+transformers>=4.30.0
+openai>=1.0.0
+langchain>=0.1.0
+
+# Processamento de Arquivos
+PyPDF2>=3.0.0
+pdfplumber>=0.9.0
+openpyxl>=3.1.0
+python-docx>=0.8.11
+
+# E-mail
+google-api-python-client>=2.90.0
+google-auth-oauthlib>=1.0.0
+exchangelib>=5.0.0
+
+# Banco de Dados
+sqlalchemy>=2.0.0
+pymongo>=4.4.0
+psycopg2-binary>=2.9.0
+
+# Cloud Storage
+google-cloud-storage>=2.10.0
+onedrivesdk>=1.1.8
+
+# Voz
+SpeechRecognition>=3.10.0
+pyttsx3>=2.90
+gTTS>=2.3.0
+
+# Dashboard e Visualização
+streamlit>=1.25.0
+plotly>=5.15.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Utilitários
+python-dotenv>=1.0.0
+requests>=2.31.0
+aiohttp>=3.8.0
+schedule>=1.2.0
+python-dateutil>=2.8.0
+pytz>=2023.3
+
+# Logging e Monitoramento
+rich>=13.0.0
+loguru>=0.7.0
