@@ -61,6 +61,21 @@ class Orchestrator:
             self.modules['tarefas'] = TarefasModule()
         except ImportError:
             pass
+        
+        try:
+            from modules.faturas import FaturasModule
+            self.modules['faturas'] = FaturasModule()
+            # Conecta com módulo de agenda para agendar boletos
+            if 'agenda' in self.modules:
+                self.modules['faturas'].set_agenda_module(self.modules['agenda'])
+        except ImportError:
+            pass
+        
+        try:
+            from modules.voz import VozModule
+            self.modules['voz'] = VozModule()
+        except ImportError:
+            pass
     
     async def process(self, message: str, user_id: str = None, 
                       attachments: list = None) -> str:
@@ -80,6 +95,12 @@ class Orchestrator:
         
         if not message:
             return RESPONSES['unknown']
+        
+        # Verifica se há pendência de categoria para responder
+        if 'financas' in self.modules and user_id:
+            resultado = self.modules['financas']._processar_categoria_pendente(user_id, message)
+            if resultado:
+                return resultado
         
         # Verifica se é comando direto
         if message.startswith('/'):
@@ -115,8 +136,153 @@ class Orchestrator:
     
     async def _handle_natural_language(self, message: str, user_id: str,
                                         attachments: list) -> str:
-        """Processa linguagem natural"""
-        # Analisa com NLP
+        """Processa linguagem natural - SEM PRECISAR DE /"""
+        text = message.lower().strip()
+        
+        # ========== FINANÇAS ==========
+        import re
+        
+        # Função para converter números por extenso para dígitos
+        def texto_para_numero(texto):
+            """Converte 'cinquenta reais' para 50"""
+            numeros = {
+                'zero': 0, 'um': 1, 'uma': 1, 'dois': 2, 'duas': 2, 'três': 3, 'tres': 3,
+                'quatro': 4, 'cinco': 5, 'seis': 6, 'sete': 7, 'oito': 8, 'nove': 9,
+                'dez': 10, 'onze': 11, 'doze': 12, 'treze': 13, 'quatorze': 14, 'catorze': 14,
+                'quinze': 15, 'dezesseis': 16, 'dezessete': 17, 'dezoito': 18, 'dezenove': 19,
+                'vinte': 20, 'trinta': 30, 'quarenta': 40, 'cinquenta': 50,
+                'sessenta': 60, 'setenta': 70, 'oitenta': 80, 'noventa': 90,
+                'cem': 100, 'cento': 100, 'duzentos': 200, 'trezentos': 300,
+                'quatrocentos': 400, 'quinhentos': 500, 'seiscentos': 600,
+                'setecentos': 700, 'oitocentos': 800, 'novecentos': 900,
+                'mil': 1000
+            }
+            
+            texto_lower = texto.lower()
+            total = 0
+            parcial = 0
+            
+            # Primeiro tenta encontrar número direto
+            num_match = re.search(r'(\d+(?:[.,]\d+)?)', texto)
+            if num_match:
+                return float(num_match.group(1).replace(',', '.'))
+            
+            # Tenta converter por extenso
+            palavras = re.findall(r'\b\w+\b', texto_lower)
+            for palavra in palavras:
+                if palavra in numeros:
+                    valor = numeros[palavra]
+                    if valor == 1000:
+                        parcial = (parcial if parcial else 1) * 1000
+                    elif valor >= 100:
+                        parcial = (parcial if parcial else 0) + valor
+                    else:
+                        parcial += valor
+                elif palavra == 'e':
+                    continue
+                elif palavra in ['reais', 'real', 'conto', 'contos', 'pila', 'pilas']:
+                    total += parcial
+                    parcial = 0
+            
+            total += parcial
+            return total if total > 0 else None
+        
+        # Registrar despesa: "gastei 50 no almoço", "paguei cinquenta reais de luz"
+        gasto_patterns = ['gastei', 'paguei', 'comprei', 'despesa', 'gastar', 'pagar']
+        if any(p in text for p in gasto_patterns):
+            valor = texto_para_numero(text)
+            if valor and valor > 0:
+                descricao = text
+                if 'financas' in self.modules:
+                    return await self.modules['financas'].handle('despesas', [str(valor), descricao], user_id, attachments)
+        
+        # Registrar entrada: "recebi 1000", "ganhei quinhentos reais"
+        entrada_patterns = ['recebi', 'ganhei', 'entrada', 'salário', 'salario', 'receber']
+        if any(p in text for p in entrada_patterns):
+            valor = texto_para_numero(text)
+            if valor and valor > 0:
+                descricao = text
+                if 'financas' in self.modules:
+                    return await self.modules['financas'].handle('entrada', [str(valor), descricao], user_id, attachments)
+        
+        # Ver gastos: "gastos", "quanto gastei", "minhas despesas"
+        if any(word in text for word in ['gastos', 'quanto gastei', 'minhas despesas', 'despesas do mês']):
+            if 'financas' in self.modules:
+                return await self.modules['financas'].handle('gastos', [], user_id, attachments)
+        
+        # Ver saldo: "saldo", "quanto tenho", "meu dinheiro"
+        if any(word in text for word in ['saldo', 'quanto tenho', 'meu dinheiro', 'finanças', 'financas']):
+            if 'financas' in self.modules:
+                return await self.modules['financas'].handle('saldo', [], user_id, attachments)
+        
+        # ========== AGENDA ==========
+        # Detecta menção a datas - ativa agenda automaticamente
+        datas_patterns = [
+            # Dias relativos
+            'hoje', 'amanhã', 'amanha', 'depois de amanhã', 'depois de amanha',
+            'ontem', 'anteontem',
+            # Dias da semana
+            'segunda', 'terça', 'terca', 'quarta', 'quinta', 'sexta', 'sábado', 'sabado', 'domingo',
+            'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira',
+            # Períodos
+            'próxima semana', 'proxima semana', 'semana que vem', 'fim de semana',
+            'próximo mês', 'proximo mes', 'mês que vem', 'mes que vem',
+            'esse mês', 'este mês', 'essa semana', 'esta semana',
+            # Datas específicas
+            'dia ', '/01', '/02', '/03', '/04', '/05', '/06', '/07', '/08', '/09', '/10', '/11', '/12',
+            # Horários
+            'às ', 'as ', ' horas', ':00', ':30', 'meio-dia', 'meio dia', 'meia-noite',
+            # Expressões de tempo
+            'daqui a', 'daqui há', 'em uma hora', 'em duas horas', 'em 1 hora', 'em 2 horas',
+            'de manhã', 'de manha', 'de tarde', 'de noite', 'à noite', 'a noite',
+            # Ações de agenda
+            'marcar', 'agendar', 'compromisso', 'reunião', 'reuniao', 'encontro', 'consulta'
+        ]
+        
+        if any(p in text for p in datas_patterns):
+            if 'agenda' in self.modules:
+                return await self.modules['agenda'].handle_natural(message, None, user_id, attachments)
+        
+        # Criar lembrete: "lembrete amanhã pagar conta", "me lembra de..."
+        if any(word in text for word in ['lembrete', 'me lembra', 'lembre-me', 'lembrar']):
+            if 'agenda' in self.modules:
+                return await self.modules['agenda'].handle_natural(message, None, user_id, attachments)
+        
+        # Ver agenda: "agenda", "compromissos", "eventos"
+        if any(word in text for word in ['agenda', 'compromissos', 'eventos', 'reuniões']):
+            if 'agenda' in self.modules:
+                return await self.modules['agenda'].handle('agenda', [], user_id, attachments)
+        
+        # ========== TAREFAS ==========
+        # Criar tarefa: "tarefa comprar leite", "adiciona tarefa..."
+        if any(word in text for word in ['tarefa', 'todo', 'afazer', 'pendente']):
+            if 'tarefas' in self.modules:
+                return await self.modules['tarefas'].handle_natural(message, None, user_id, attachments)
+        
+        # ========== FATURAS/BOLETOS ==========
+        # Processar PDF se tiver anexo
+        if attachments:
+            for anexo in attachments:
+                if anexo.lower().endswith('.pdf'):
+                    if 'faturas' in self.modules:
+                        return await self.modules['faturas'].handle('fatura', [], user_id, attachments)
+        
+        # Falar sobre fatura/boleto
+        if any(word in text for word in ['boleto', 'fatura', 'conta para pagar']):
+            if 'faturas' in self.modules:
+                return await self.modules['faturas'].handle('fatura', [], user_id, attachments)
+        
+        # ========== COMANDOS GERAIS ==========
+        if any(word in text for word in ['ajuda', 'help', 'comandos', 'o que você faz']):
+            return RESPONSES['help']
+        
+        if any(word in text for word in ['status', 'como está', 'funcionando']):
+            return self._get_status()
+        
+        if any(word in text for word in ['oi', 'olá', 'ola', 'eae', 'ei', 'bom dia', 'boa tarde', 'boa noite']):
+            return "👋 Olá! Como posso ajudar?\n\nDiga algo como:\n• *gastei 50 no almoço*\n• *quanto gastei esse mês*\n• *lembrete amanhã pagar conta*\n• Ou envie um *boleto em PDF*!"
+        
+        # Analisa com NLP como fallback
         analysis = self.nlp.analyze(message)
         
         # Se identificou intenção clara
@@ -128,8 +294,23 @@ class Orchestrator:
                     message, analysis, user_id, attachments
                 )
         
-        # Resposta genérica com sugestões
-        return self._suggest_commands(message)
+        # Não entendeu - dá dicas
+        return """🤔 Não entendi. Tente algo como:
+
+💰 *Finanças:*
+• gastei 50 no almoço
+• recebi 1000 de salário
+• quanto gastei esse mês
+
+📅 *Agenda:*
+• lembrete amanhã reunião
+• agenda de hoje
+
+📋 *Tarefas:*
+• tarefa comprar leite
+
+📄 *Boletos:*
+• Envie um PDF de boleto"""
     
     def _get_status(self) -> str:
         """Retorna status do sistema"""

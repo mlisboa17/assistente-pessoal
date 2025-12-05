@@ -298,3 +298,36 @@ _Você será notificado no horário._
 📅 {data}
 ⏰ {hora}
 """
+    
+    async def _criar_lembrete_interno(self, user_id: str, texto: str, 
+                                       data_hora: str, extra: dict = None) -> str:
+        """
+        Cria lembrete internamente (usado por outros módulos)
+        
+        Args:
+            user_id: ID do usuário
+            texto: Texto do lembrete
+            data_hora: Data/hora ISO format
+            extra: Dados extras (boleto_id, valor, etc)
+        """
+        from uuid import uuid4
+        
+        lembrete = Lembrete(
+            id=str(uuid4())[:8],
+            texto=texto,
+            data_hora=data_hora,
+            user_id=user_id,
+            ativo=True,
+            criado_em=datetime.now().isoformat()
+        )
+        
+        lembrete_dict = lembrete.to_dict()
+        
+        # Adiciona dados extras
+        if extra:
+            lembrete_dict['extra'] = extra
+        
+        self.lembretes.append(lembrete_dict)
+        self._save_data()
+        
+        return lembrete.id

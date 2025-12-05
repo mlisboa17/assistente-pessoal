@@ -53,6 +53,10 @@ COMMAND_MAPPING = {
     'saldo': 'financas',
     'financas': 'financas',
     'dinheiro': 'financas',
+    'entrada': 'financas',
+    'sugestoes': 'financas',
+    'aprovar': 'financas',
+    'rejeitar': 'financas',
     
     # Faturas
     'fatura': 'faturas',

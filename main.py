@@ -5,9 +5,16 @@ Ponto de entrada principal do sistema
 import os
 import sys
 import asyncio
+import logging
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
+
+# Configura logging para ver erros
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 sys.path.insert(0, os.path.dirname(__file__))
 

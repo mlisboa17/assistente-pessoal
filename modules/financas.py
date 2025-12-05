@@ -30,21 +30,157 @@ class FinancasModule:
     """Gerenciador de Finanças"""
     
     CATEGORIAS = {
-        'alimentacao': ['comida', 'restaurante', 'lanche', 'mercado', 'supermercado', 'ifood', 'uber eats'],
-        'transporte': ['uber', '99', 'taxi', 'gasolina', 'combustível', 'estacionamento', 'ônibus', 'metrô'],
-        'moradia': ['aluguel', 'condomínio', 'luz', 'água', 'gás', 'internet', 'iptu'],
-        'saude': ['farmácia', 'remédio', 'médico', 'consulta', 'exame', 'plano de saúde'],
-        'lazer': ['cinema', 'netflix', 'spotify', 'jogo', 'viagem', 'bar', 'festa'],
-        'educacao': ['curso', 'livro', 'escola', 'faculdade', 'mensalidade'],
+        'alimentacao': [
+            # Refeições
+            'comida', 'almoço', 'almoco', 'janta', 'jantar', 'café', 'cafe', 'lanche', 'refeição', 'refeicao',
+            'café da manhã', 'cafe da manha', 'marmita', 'quentinha', 'self service', 'self-service',
+            # Estabelecimentos
+            'restaurante', 'lanchonete', 'padaria', 'açougue', 'acougue', 'peixaria', 'hortifruti',
+            'mercado', 'supermercado', 'mercadinho', 'mercearia', 'feira', 'sacolão', 'sacolao',
+            'atacadão', 'atacadao', 'atacado', 'assaí', 'assai', 'carrefour', 'extra', 'pão de açúcar',
+            'big', 'walmart', 'sam\'s', 'sams', 'costco',
+            # Delivery/Apps
+            'ifood', 'uber eats', 'rappi', 'zé delivery', 'ze delivery', 'aiqfome', 'delivery',
+            # Bebidas
+            'refrigerante', 'suco', 'bebida', 'drinks',
+            # Fast food
+            'mcdonald', 'mc', 'burger king', 'bk', 'subway', 'pizza', 'pizzaria', 'hambúrguer', 'hamburger',
+            'hot dog', 'cachorro quente', 'açaí', 'acai', 'sorvete', 'sorveteria', 'doceria', 'doce',
+            # Específicos
+            'pão', 'pao', 'leite', 'carne', 'frango', 'peixe', 'arroz', 'feijão', 'feijao',
+            'legumes', 'frutas', 'verduras', 'ovos', 'queijo', 'presunto', 'frios',
+            'bolacha', 'biscoito', 'chocolate', 'bolo', 'salgado', 'coxinha', 'pastel',
+            # Genéricos
+            'comer', 'comendo', 'comi', 'alimentação', 'alimentacao', 'rancho', 'compras do mês'
+        ],
+        'combustivel': [
+            # Combustíveis
+            'gasolina', 'combustível', 'combustivel', 'álcool', 'alcool', 'etanol', 'diesel', 'gnv',
+            'posto', 'abastecimento', 'abastecer', 'abasteci', 'tanque', 'encher o tanque',
+            'shell', 'petrobras', 'br', 'ipiranga', 'ale', 'posto de gasolina'
+        ],
+        'transporte': [
+            'uber', '99', '99pop', 'taxi', 'táxi', 'cabify', 'indriver',
+            'estacionamento', 'zona azul', 'valet', 'garagem',
+            'ônibus', 'onibus', 'metrô', 'metro', 'trem', 'brt', 'passagem', 'bilhete único',
+            'pedágio', 'pedagio', 'ipva', 'licenciamento', 'multa', 'detran',
+            'mecânico', 'mecanico', 'oficina', 'pneu', 'borracharia', 'troca de óleo', 'revisão',
+            'carro', 'moto', 'bicicleta', 'bike', 'patinete'
+        ],
+        'moradia': [
+            'aluguel', 'condomínio', 'condominio', 'iptu', 'luz', 'energia', 'conta de luz',
+            'água', 'agua', 'conta de água', 'saneamento', 'esgoto',
+            'gás', 'gas', 'botijão', 'botijao',
+            'internet', 'wifi', 'banda larga', 'fibra',
+            'telefone', 'plano', 'tim', 'vivo', 'claro', 'oi',
+            'tv', 'tv a cabo', 'sky', 'net',
+            'faxina', 'diarista', 'empregada', 'limpeza',
+            'móveis', 'moveis', 'eletrodoméstico', 'eletrodomestico', 'geladeira', 'fogão', 'fogao',
+            'manutenção', 'manutencao', 'conserto', 'reparo', 'encanador', 'eletricista', 'pintor'
+        ],
+        'saude': [
+            'farmácia', 'farmacia', 'remédio', 'remedio', 'medicamento', 'droga', 'drogaria',
+            'médico', 'medico', 'consulta', 'doutor', 'dr', 'clínica', 'clinica',
+            'exame', 'laboratório', 'laboratorio', 'raio x', 'ultrassom', 'ressonância',
+            'hospital', 'emergência', 'emergencia', 'pronto socorro', 'upa',
+            'dentista', 'odonto', 'ortodontia', 'aparelho',
+            'psicólogo', 'psicologo', 'terapia', 'psiquiatra',
+            'plano de saúde', 'plano de saude', 'unimed', 'amil', 'bradesco saúde', 'sulamerica',
+            'óculos', 'oculos', 'lente', 'oftalmologista', 'oculista',
+            'fisioterapia', 'fisioterapeuta', 'massagem', 'quiropraxia',
+            'vacina', 'vitamina', 'suplemento'
+        ],
+        'lazer': [
+            # Cinema/Entretenimento
+            'cinema', 'filme', 'teatro', 'show', 'ingresso', 'evento', 'espetáculo', 'espetaculo',
+            # Streaming
+            'netflix', 'spotify', 'amazon prime', 'disney', 'hbo', 'globoplay', 'streaming',
+            'youtube premium', 'deezer', 'apple music',
+            # Games
+            'jogo', 'game', 'playstation', 'xbox', 'nintendo', 'steam', 'videogame',
+            # Viagem
+            'viagem', 'hotel', 'pousada', 'airbnb', 'passagem aérea', 'avião', 'voo',
+            # Social
+            'bar', 'balada', 'festa', 'churrasco', 'churras', 'cerveja', 'happy hour',
+            'boteco', 'pub', 'boate', 'night', 'drinks',
+            # Atividades
+            'praia', 'parque', 'clube', 'piscina', 'resort', 'spa',
+            'hobby', 'diversão', 'diversao', 'passeio', 'tour', 'excursão', 'excursao',
+            # Esportes/Academia
+            'academia', 'gym', 'smartfit', 'bluefit', 'crossfit', 'musculação', 'musculacao',
+            'futebol', 'quadra', 'tênis', 'natação', 'natacao', 'corrida', 'esporte',
+            # Outros
+            'parque de diversão', 'zoológico', 'zoologico', 'aquário', 'aquario', 'museu',
+            'escape room', 'boliche', 'sinuca', 'karaokê', 'karaoke'
+        ],
+        'educacao': [
+            'curso', 'aula', 'escola', 'colégio', 'colegio', 'faculdade', 'universidade',
+            'mensalidade', 'matrícula', 'matricula', 'material escolar', 'apostila',
+            'livro', 'livraria', 'ebook', 'kindle',
+            'inglês', 'ingles', 'espanhol', 'idioma', 'língua', 'lingua',
+            'workshop', 'palestra', 'congresso', 'seminário', 'seminario',
+            'udemy', 'coursera', 'alura', 'rocketseat', 'online'
+        ],
+        'vestuario': [
+            'roupa', 'camisa', 'camiseta', 'calça', 'calca', 'short', 'bermuda', 'vestido', 'saia',
+            'sapato', 'tênis', 'tenis', 'sandália', 'sandalia', 'chinelo', 'bota',
+            'loja', 'shopping', 'renner', 'riachuelo', 'c&a', 'cea', 'marisa', 'hering',
+            'roupa íntima', 'cueca', 'calcinha', 'meia', 'cinto', 'acessório', 'acessorio',
+            'bolsa', 'mochila', 'carteira', 'óculos de sol'
+        ],
+        'beleza': [
+            'salão', 'salao', 'cabeleireiro', 'cabelo', 'corte', 'escova', 'tintura',
+            'manicure', 'pedicure', 'unha', 'esmalte',
+            'barbeiro', 'barbearia', 'barba',
+            'estética', 'estetica', 'depilação', 'depilacao', 'sobrancelha',
+            'maquiagem', 'make', 'batom', 'base', 'rímel', 'rimel',
+            'perfume', 'creme', 'hidratante', 'shampoo', 'condicionador', 'sabonete',
+            'desodorante', 'protetor solar'
+        ],
+        'pets': [
+            'pet', 'cachorro', 'gato', 'animal', 'ração', 'racao', 'petshop', 'pet shop',
+            'veterinário', 'veterinario', 'vet', 'vacina pet', 'banho e tosa', 'tosa',
+            'coleira', 'brinquedo pet', 'casinha', 'cama pet'
+        ],
+        'tecnologia': [
+            'celular', 'smartphone', 'iphone', 'samsung', 'motorola', 'xiaomi',
+            'computador', 'notebook', 'pc', 'mac', 'apple', 'dell', 'lenovo',
+            'tablet', 'ipad', 'fone', 'airpod', 'eletrônico', 'eletronico',
+            'carregador', 'cabo', 'acessório tech', 'case', 'película', 'pelicula'
+        ],
+        'assinaturas': [
+            'assinatura', 'mensalidade', 'plano mensal', 'recorrente',
+            'amazon', 'prime', 'spotify', 'netflix', 'youtube premium', 'icloud', 'google one',
+            'gym', 'academia', 'smartfit', 'bluefit'
+        ],
         'outros': []
+    }
+    
+    # Mapeamento de números/textos para categorias
+    CATEGORIA_MAP = {
+        '1': 'alimentacao', 'alimentacao': 'alimentacao', 'alimentação': 'alimentacao',
+        '2': 'combustivel', 'combustivel': 'combustivel', 'combustível': 'combustivel',
+        '3': 'transporte', 'transporte': 'transporte',
+        '4': 'moradia', 'moradia': 'moradia', 'casa': 'moradia',
+        '5': 'saude', 'saude': 'saude', 'saúde': 'saude',
+        '6': 'lazer', 'lazer': 'lazer', 'diversao': 'lazer', 'diversão': 'lazer',
+        '7': 'educacao', 'educacao': 'educacao', 'educação': 'educacao',
+        '8': 'vestuario', 'vestuario': 'vestuario', 'vestuário': 'vestuario', 'roupa': 'vestuario',
+        '9': 'beleza', 'beleza': 'beleza',
+        '10': 'tecnologia', 'tecnologia': 'tecnologia', 'tech': 'tecnologia',
+        '0': 'outros', 'outros': 'outros'
     }
     
     def __init__(self, data_dir: str = "data"):
         self.data_dir = data_dir
         self.transacoes_file = os.path.join(data_dir, "transacoes.json")
+        self.pendencias_file = os.path.join(data_dir, "pendencias_categoria.json")
+        self.sugestoes_file = os.path.join(data_dir, "sugestoes_categoria.json")
         
         os.makedirs(data_dir, exist_ok=True)
         self._load_data()
+        self._load_pendencias()
+        self._load_sugestoes()
     
     def _load_data(self):
         """Carrega dados do disco"""
@@ -53,6 +189,210 @@ class FinancasModule:
                 self.transacoes = json.load(f)
         else:
             self.transacoes = []
+    
+    def _load_pendencias(self):
+        """Carrega pendências de categorização"""
+        if os.path.exists(self.pendencias_file):
+            with open(self.pendencias_file, 'r', encoding='utf-8') as f:
+                self.pendencias = json.load(f)
+        else:
+            self.pendencias = {}
+    
+    def _load_sugestoes(self):
+        """Carrega sugestões de palavras-chave pendentes de aprovação"""
+        if os.path.exists(self.sugestoes_file):
+            with open(self.sugestoes_file, 'r', encoding='utf-8') as f:
+                self.sugestoes = json.load(f)
+        else:
+            self.sugestoes = []
+    
+    def _save_pendencias(self):
+        """Salva pendências no disco"""
+        with open(self.pendencias_file, 'w', encoding='utf-8') as f:
+            json.dump(self.pendencias, f, ensure_ascii=False, indent=2)
+    
+    def _save_sugestoes(self):
+        """Salva sugestões no disco"""
+        with open(self.sugestoes_file, 'w', encoding='utf-8') as f:
+            json.dump(self.sugestoes, f, ensure_ascii=False, indent=2)
+    
+    def _salvar_pendencia_categoria(self, user_id: str, transacao_id: str, descricao: str):
+        """Salva uma transação pendente de categorização"""
+        self.pendencias[user_id] = {
+            'transacao_id': transacao_id,
+            'descricao': descricao,
+            'etapa': 'categoria'  # categoria -> sugestao
+        }
+        self._save_pendencias()
+    
+    def _tem_pendencia_categoria(self, user_id: str) -> bool:
+        """Verifica se usuário tem pendência de categoria"""
+        return user_id in self.pendencias
+    
+    def _adicionar_sugestao(self, palavra: str, categoria: str, descricao_original: str, user_id: str):
+        """Adiciona uma sugestão de palavra-chave para aprovação futura"""
+        sugestao = {
+            'id': str(len(self.sugestoes) + 1),
+            'palavra': palavra.lower().strip(),
+            'categoria': categoria,
+            'descricao_original': descricao_original,
+            'user_id': user_id,
+            'data': datetime.now().isoformat(),
+            'status': 'pendente'  # pendente, aprovado, rejeitado
+        }
+        self.sugestoes.append(sugestao)
+        self._save_sugestoes()
+        return sugestao
+    
+    def _processar_categoria_pendente(self, user_id: str, resposta: str) -> str:
+        """Processa a resposta de categorização pendente"""
+        if user_id not in self.pendencias:
+            return None
+        
+        pendencia = self.pendencias[user_id]
+        
+        # Compatibilidade com formato antigo
+        if isinstance(pendencia, str):
+            transacao_id = pendencia
+            etapa = 'categoria'
+            descricao = ''
+        else:
+            transacao_id = pendencia.get('transacao_id')
+            etapa = pendencia.get('etapa', 'categoria')
+            descricao = pendencia.get('descricao', '')
+        
+        resposta_lower = resposta.lower().strip()
+        
+        # ETAPA 1: Escolher categoria
+        if etapa == 'categoria':
+            # Verifica se é uma resposta de categoria válida
+            if resposta_lower not in self.CATEGORIA_MAP:
+                return None  # Não é uma resposta de categoria, ignora
+            
+            nova_categoria = self.CATEGORIA_MAP[resposta_lower]
+            
+            # Atualiza a transação
+            for t in self.transacoes:
+                if t.get('id') == transacao_id:
+                    t['categoria'] = nova_categoria
+                    self._save_data()
+                    
+                    emoji = self._emoji_categoria(nova_categoria)
+                    
+                    # Atualiza pendência para etapa de sugestão
+                    self.pendencias[user_id] = {
+                        'transacao_id': transacao_id,
+                        'descricao': t.get('descricao', descricao),
+                        'categoria': nova_categoria,
+                        'etapa': 'sugestao'
+                    }
+                    self._save_pendencias()
+                    
+                    return f"""
+✅ *Categoria atualizada!*
+
+{emoji} {nova_categoria.capitalize()}
+📝 {t.get('descricao', '')}
+💰 R$ {t.get('valor', 0):.2f}
+
+💡 *Quer sugerir uma palavra-chave?*
+Qual palavra devo associar a "{nova_categoria}" no futuro?
+
+_Exemplo: se gastou no "Zé da Pizza", digite "zé da pizza"_
+_Ou digite "não" para pular_"""
+            
+            return None
+        
+        # ETAPA 2: Sugerir palavra-chave
+        elif etapa == 'sugestao':
+            categoria = pendencia.get('categoria', 'outros')
+            
+            # Se não quiser sugerir
+            if resposta_lower in ['não', 'nao', 'n', 'pular', 'skip', 'cancelar']:
+                del self.pendencias[user_id]
+                self._save_pendencias()
+                return "👍 Ok, sem sugestão. Pode continuar!"
+            
+            # Salva a sugestão para aprovação futura
+            sugestao = self._adicionar_sugestao(
+                palavra=resposta_lower,
+                categoria=categoria,
+                descricao_original=descricao,
+                user_id=user_id
+            )
+            
+            # Remove pendência
+            del self.pendencias[user_id]
+            self._save_pendencias()
+            
+            emoji = self._emoji_categoria(categoria)
+            return f"""
+📝 *Sugestão salva!*
+
+{emoji} Palavra: *{resposta_lower}*
+🏷️ Categoria: {categoria.capitalize()}
+
+_Aguardando aprovação. Use /sugestoes para ver todas._"""
+        
+        return None
+    
+    def _listar_sugestoes(self, user_id: str = None) -> str:
+        """Lista sugestões pendentes de aprovação"""
+        pendentes = [s for s in self.sugestoes if s.get('status') == 'pendente']
+        
+        if not pendentes:
+            return "✅ Nenhuma sugestão pendente de aprovação!"
+        
+        texto = "📋 *Sugestões Pendentes de Aprovação*\n\n"
+        
+        for s in pendentes:
+            emoji = self._emoji_categoria(s.get('categoria', 'outros'))
+            texto += f"🔹 *ID {s['id']}*: \"{s['palavra']}\" → {emoji} {s['categoria'].capitalize()}\n"
+            texto += f"   _Origem: {s.get('descricao_original', 'N/A')[:30]}..._\n\n"
+        
+        texto += "\n*Comandos:*\n"
+        texto += "• `/aprovar [id]` - Aprova e adiciona à categoria\n"
+        texto += "• `/rejeitar [id]` - Rejeita a sugestão"
+        
+        return texto
+    
+    def _aprovar_sugestao(self, sugestao_id: str) -> str:
+        """Aprova uma sugestão e adiciona à categoria"""
+        for s in self.sugestoes:
+            if s.get('id') == sugestao_id and s.get('status') == 'pendente':
+                palavra = s['palavra']
+                categoria = s['categoria']
+                
+                # Adiciona à categoria (em memória - para persistir, seria em arquivo separado)
+                if categoria in self.CATEGORIAS:
+                    if palavra not in self.CATEGORIAS[categoria]:
+                        self.CATEGORIAS[categoria].append(palavra)
+                
+                s['status'] = 'aprovado'
+                s['aprovado_em'] = datetime.now().isoformat()
+                self._save_sugestoes()
+                
+                emoji = self._emoji_categoria(categoria)
+                return f"""
+✅ *Sugestão aprovada!*
+
+{emoji} "{palavra}" → {categoria.capitalize()}
+
+_A palavra será reconhecida automaticamente!_"""
+        
+        return "❌ Sugestão não encontrada ou já processada."
+    
+    def _rejeitar_sugestao(self, sugestao_id: str) -> str:
+        """Rejeita uma sugestão"""
+        for s in self.sugestoes:
+            if s.get('id') == sugestao_id and s.get('status') == 'pendente':
+                s['status'] = 'rejeitado'
+                s['rejeitado_em'] = datetime.now().isoformat()
+                self._save_sugestoes()
+                
+                return f"🗑️ Sugestão \"{s['palavra']}\" rejeitada."
+        
+        return "❌ Sugestão não encontrada ou já processada."
     
     def _save_data(self):
         """Salva dados no disco"""
@@ -63,12 +403,37 @@ class FinancasModule:
         """Detecta categoria baseado na descrição"""
         descricao_lower = descricao.lower()
         
+        # Primeiro verifica palavras aprovadas das sugestões
+        for s in self.sugestoes:
+            if s.get('status') == 'aprovado':
+                if s['palavra'] in descricao_lower:
+                    return s['categoria']
+        
         for categoria, palavras in self.CATEGORIAS.items():
             for palavra in palavras:
                 if palavra in descricao_lower:
                     return categoria
         
         return 'outros'
+    
+    def _emoji_categoria(self, categoria: str) -> str:
+        """Retorna emoji da categoria"""
+        emojis = {
+            'alimentacao': '🍔',
+            'combustivel': '⛽',
+            'transporte': '🚗',
+            'moradia': '🏠',
+            'saude': '💊',
+            'lazer': '🎮',
+            'educacao': '📚',
+            'vestuario': '👕',
+            'beleza': '💇',
+            'pets': '🐕',
+            'tecnologia': '📱',
+            'assinaturas': '📋',
+            'outros': '📦'
+        }
+        return emojis.get(categoria, '💸')
     
     async def handle(self, command: str, args: List[str], 
                      user_id: str, attachments: list = None) -> str:
@@ -90,7 +455,21 @@ class FinancasModule:
                 return self._registrar_entrada(user_id, args)
             return "💵 Use: /entrada [valor] [descrição]"
         
-        return "💰 Comandos: /gastos, /despesas, /saldo"
+        # Comandos de sugestões
+        elif command == 'sugestoes':
+            return self._listar_sugestoes(user_id)
+        
+        elif command == 'aprovar':
+            if args:
+                return self._aprovar_sugestao(args[0])
+            return "❌ Use: /aprovar [id]"
+        
+        elif command == 'rejeitar':
+            if args:
+                return self._rejeitar_sugestao(args[0])
+            return "❌ Use: /rejeitar [id]"
+        
+        return "💰 Comandos: /gastos, /despesas, /saldo, /sugestoes"
     
     async def handle_natural(self, message: str, analysis: Any,
                               user_id: str, attachments: list = None) -> str:
@@ -150,14 +529,40 @@ class FinancasModule:
         self.transacoes.append(transacao.to_dict())
         self._save_data()
         
-        return f"""
-✅ *Despesa Registrada!*
+        emoji = self._emoji_categoria(categoria)
+        
+        # Se categoria ficou como "outros", pergunta se quer definir
+        pergunta_categoria = ""
+        if categoria == 'outros':
+            pergunta_categoria = """
 
-💸 R$ {valor:.2f}
+❓ *Não reconheci a categoria.*
+Em qual categoria você quer salvar?
+
+1️⃣ Alimentação
+2️⃣ Combustível
+3️⃣ Transporte
+4️⃣ Moradia
+5️⃣ Saúde
+6️⃣ Lazer
+7️⃣ Educação
+8️⃣ Vestuário
+9️⃣ Beleza
+🔟 Tecnologia
+0️⃣ Outros (manter)
+
+_Responda com o número ou nome da categoria_"""
+            # Salva transação pendente para categorização
+            self._salvar_pendencia_categoria(user_id, transacao.id, descricao)
+        
+        return f"""
+💸 *DESPESA Registrada!*
+
+{emoji} R$ {valor:.2f}
 📝 {descricao}
 🏷️ Categoria: {categoria.capitalize()}
 📅 {datetime.now().strftime('%d/%m/%Y')}
-"""
+{pergunta_categoria}"""
     
     def _registrar_entrada(self, user_id: str, args: List[str]) -> str:
         """Registra uma entrada"""
@@ -189,9 +594,9 @@ class FinancasModule:
         self._save_data()
         
         return f"""
-✅ *Entrada Registrada!*
+💵 *RECEITA Registrada!*
 
-💵 R$ {valor:.2f}
+✅ R$ {valor:.2f}
 📝 {descricao}
 📅 {datetime.now().strftime('%d/%m/%Y')}
 """
@@ -297,6 +702,11 @@ _Use /despesas [valor] [descrição] para registrar._
             'saude': '💊',
             'lazer': '🎮',
             'educacao': '📚',
+            'vestuario': '👕',
+            'beleza': '💇',
+            'pets': '🐕',
+            'tecnologia': '📱',
+            'assinaturas': '📺',
             'renda': '💵',
             'outros': '📦'
         }
