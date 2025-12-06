@@ -1,0 +1,383 @@
+/**
+ * 📱 Bot WhatsApp - Assistente Pessoal
+ * Usa Baileys para conectar ao WhatsApp Web
+ * Suporta: Texto, Áudio e Arquivos (PDF)
+ */
+
+const makeWASocket = require('@whiskeysockets/baileys').default;
+const { useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const qrcode = require('qrcode-terminal');
+const pino = require('pino');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+
+// Configuração do logger
+const logger = pino({ level: 'silent' });
+
+// URL do servidor Python
+const PYTHON_SERVER = process.env.PYTHON_SERVER || 'http://localhost:8010';
+
+// Pasta para salvar sessão
+const AUTH_FOLDER = './auth_info';
+
+// Pasta temporária para arquivos
+const TEMP_FOLDER = './temp';
+if (!fs.existsSync(TEMP_FOLDER)) {
+    fs.mkdirSync(TEMP_FOLDER, { recursive: true });
+}
+
+async function connectToWhatsApp() {
+    // Carrega estado de autenticação
+    const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
+
+    // Cria socket
+    const sock = makeWASocket({
+        auth: state,
+        printQRInTerminal: false,
+        logger: logger
+    });
+
+    // Evento de atualização de conexão
+    sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        // Mostra QR Code no terminal
+        if (qr) {
+            console.log('\n📱 Escaneie o QR Code abaixo com seu WhatsApp:\n');
+            qrcode.generate(qr, { small: true });
+            console.log('\n⏳ Aguardando conexão...\n');
+        }
+
+        if (connection === 'close') {
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+            console.log('❌ Conexão fechada:', lastDisconnect?.error?.message, '| Status:', statusCode);
+            
+            if (shouldReconnect) {
+                // Aguarda um pouco antes de reconectar para evitar loops
+                const delay = statusCode === DisconnectReason.restartRequired ? 1000 : 3000;
+                console.log(`🔄 Reconectando em ${delay/1000}s...`);
+                setTimeout(() => connectToWhatsApp(), delay);
+            } else {
+                console.log('👋 Deslogado pelo servidor. Delete a pasta auth_info e reinicie para reconectar.');
+            }
+        }
+
+        if (connection === 'open') {
+            console.log('\n✅ Conectado ao WhatsApp!');
+            console.log('🔐 Sessão autenticada e persistida em ./auth_info');
+            console.log('🤖 Bot está pronto para receber mensagens!\n');
+            console.log('📝 Funcionalidades ativas:');
+            console.log('   • Mensagens de texto');
+            console.log('   • Áudios (transcrição automática)');
+            console.log('   • Arquivos PDF (boletos/faturas)');
+            console.log('   • 🆕 Comprovantes (análise com IA)\n');
+        }
+    });
+
+    // Salva credenciais quando atualizar
+    sock.ev.on('creds.update', saveCreds);
+
+    // Processa mensagens recebidas
+    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        if (type !== 'notify') return;
+
+        for (const msg of messages) {
+            // Ignora mensagens enviadas por mim
+            if (msg.key.fromMe) continue;
+
+            const from = msg.key.remoteJid;
+            const pushName = msg.pushName || 'Usuário';
+
+            try {
+                // === ÁUDIO ===
+                if (msg.message?.audioMessage) {
+                    console.log(`🎤 ${pushName}: [ÁUDIO RECEBIDO]`);
+                    await sock.sendMessage(from, { text: '🎤 Transcrevendo seu áudio...' });
+                    
+                    const response = await processAudio(msg, from, pushName);
+                    await sock.sendMessage(from, { text: response });
+                    console.log(`📤 Resposta enviada!`);
+                    continue;
+                }
+
+                // === DOCUMENTO/ARQUIVO ===
+                if (msg.message?.documentMessage) {
+                    const filename = msg.message.documentMessage.fileName || 'arquivo';
+                    const mimetype = msg.message.documentMessage.mimetype || '';
+                    console.log(`📄 ${pushName}: [ARQUIVO: ${filename}]`);
+                    
+                    await sock.sendMessage(from, { text: `📄 Processando arquivo: ${filename}...` });
+                    
+                    const response = await processFile(msg, from, pushName);
+                    await sock.sendMessage(from, { text: response });
+                    console.log(`📤 Resposta enviada!`);
+                    continue;
+                }
+
+                // === IMAGEM ===
+                if (msg.message?.imageMessage) {
+                    const caption = msg.message.imageMessage.caption || '';
+                    console.log(`🖼️ ${pushName}: [IMAGEM] ${caption}`);
+                    
+                    await sock.sendMessage(from, { text: '🧾 Analisando comprovante...' });
+                    
+                    // Processa como possível comprovante
+                    const response = await processImage(msg, from, pushName);
+                    await sock.sendMessage(from, { text: response });
+                    console.log(`📤 Resposta enviada!`);
+                    continue;
+                }
+
+                // === TEXTO ===
+                let text = '';
+                if (msg.message?.conversation) {
+                    text = msg.message.conversation;
+                } else if (msg.message?.extendedTextMessage?.text) {
+                    text = msg.message.extendedTextMessage.text;
+                }
+
+                if (!text) continue;
+
+                console.log(`📩 ${pushName}: ${text}`);
+
+                const response = await processMessage(text, from, pushName);
+                await sock.sendMessage(from, { text: response });
+                console.log(`📤 Resposta enviada!`);
+
+            } catch (error) {
+                console.error('❌ Erro ao processar:', error.message);
+                await sock.sendMessage(from, { 
+                    text: '❌ Desculpe, ocorreu um erro ao processar sua mensagem.' 
+                });
+            }
+        }
+    });
+
+    return sock;
+}
+
+/**
+ * Processa mensagem de texto enviando para o servidor Python
+ */
+async function processMessage(text, userId, userName) {
+    try {
+        const response = await axios.post(`${PYTHON_SERVER}/process`, {
+            message: text,
+            user_id: userId,
+            user_name: userName
+        }, {
+            timeout: 30000
+        });
+
+        return response.data.response || 'Não entendi. Digite /ajuda para ver os comandos.';
+    } catch (error) {
+        if (error.code === 'ECONNREFUSED') {
+            return processLocal(text);
+        }
+        throw error;
+    }
+}
+
+/**
+ * Processa áudio - Baixa, envia para API e retorna transcrição + resposta
+ */
+async function processAudio(msg, userId, userName) {
+    try {
+        // Baixa o áudio
+        const buffer = await downloadMediaMessage(msg, 'buffer', {});
+        
+        if (!buffer || buffer.length === 0) {
+            return '❌ Não consegui baixar o áudio. Tente novamente.';
+        }
+
+        // Converte para base64
+        const audioBase64 = buffer.toString('base64');
+        const mimetype = msg.message.audioMessage.mimetype || 'audio/ogg';
+
+        // Envia para o servidor Python
+        const response = await axios.post(`${PYTHON_SERVER}/process-audio`, {
+            audio: audioBase64,
+            mimetype: mimetype,
+            user_id: userId,
+            user_name: userName
+        }, {
+            timeout: 60000 // Áudio pode demorar mais
+        });
+
+        return response.data.response || '❌ Erro ao processar áudio.';
+
+    } catch (error) {
+        if (error.code === 'ECONNREFUSED') {
+            return '❌ Servidor Python não está rodando.\n\nInicie com: `python api_server.py`';
+        }
+        console.error('Erro ao processar áudio:', error.message);
+        return `❌ Erro ao processar áudio: ${error.message}`;
+    }
+}
+
+/**
+ * Processa arquivo (PDF) - Baixa, envia para API
+ */
+async function processFile(msg, userId, userName) {
+    try {
+        // Baixa o arquivo
+        const buffer = await downloadMediaMessage(msg, 'buffer', {});
+        
+        if (!buffer || buffer.length === 0) {
+            return '❌ Não consegui baixar o arquivo. Tente novamente.';
+        }
+
+        const filename = msg.message.documentMessage.fileName || 'arquivo';
+        const mimetype = msg.message.documentMessage.mimetype || '';
+        const caption = msg.message.documentMessage.caption || '';
+
+        // Converte para base64
+        const fileBase64 = buffer.toString('base64');
+
+        // Envia para o servidor Python
+        const response = await axios.post(`${PYTHON_SERVER}/process-file`, {
+            file: fileBase64,
+            filename: filename,
+            mimetype: mimetype,
+            caption: caption,
+            user_id: userId,
+            user_name: userName
+        }, {
+            timeout: 60000
+        });
+
+        return response.data.response || '❌ Erro ao processar arquivo.';
+
+    } catch (error) {
+        if (error.code === 'ECONNREFUSED') {
+            return '❌ Servidor Python não está rodando.\n\nInicie com: `python api_server.py`';
+        }
+        console.error('Erro ao processar arquivo:', error.message);
+        return `❌ Erro ao processar arquivo: ${error.message}`;
+    }
+}
+
+/**
+ * Processa imagem (comprovantes, PIX, recibos) - Baixa, envia para API
+ */
+async function processImage(msg, userId, userName) {
+    try {
+        // Baixa a imagem
+        const buffer = await downloadMediaMessage(msg, 'buffer', {});
+        
+        if (!buffer || buffer.length === 0) {
+            return '❌ Não consegui baixar a imagem. Tente novamente.';
+        }
+
+        const mimetype = msg.message.imageMessage.mimetype || 'image/jpeg';
+        const caption = msg.message.imageMessage.caption || '';
+
+        // Converte para base64
+        const imageBase64 = buffer.toString('base64');
+
+        // Envia para o servidor Python (mesmo endpoint de arquivo)
+        const response = await axios.post(`${PYTHON_SERVER}/process-file`, {
+            file: imageBase64,
+            filename: 'comprovante.jpg',
+            mimetype: mimetype,
+            caption: caption,
+            user_id: userId,
+            user_name: userName
+        }, {
+            timeout: 60000
+        });
+
+        return response.data.response || '❌ Erro ao processar imagem.';
+
+    } catch (error) {
+        if (error.code === 'ECONNREFUSED') {
+            return '❌ Servidor Python não está rodando.\n\nInicie com: `python api_server.py`';
+        }
+        console.error('Erro ao processar imagem:', error.message);
+        return `❌ Erro ao processar imagem: ${error.message}`;
+    }
+}
+
+/**
+ * Processamento local simples (fallback)
+ */
+function processLocal(text) {
+    const cmd = text.toLowerCase().trim();
+
+    if (cmd === '/start' || cmd === 'oi' || cmd === 'olá' || cmd === 'ola') {
+        return `🤖 *Olá! Sou seu Assistente Pessoal!*
+
+Posso ajudar você com:
+📅 Agenda e lembretes
+💰 Controle de gastos
+✅ Lista de tarefas
+📄 Processar boletos (PDF)
+🎤 Comandos por áudio
+
+*Comandos disponíveis:*
+/ajuda - Ver todos os comandos
+/tarefas - Gerenciar tarefas
+/gastos - Ver resumo financeiro
+/agenda - Ver compromissos
+
+Ou simplesmente me diga o que precisa!
+🎤 Também aceito áudios!`;
+    }
+
+    if (cmd === '/ajuda' || cmd === 'ajuda') {
+        return `📋 *Comandos Disponíveis:*
+
+*Tarefas:*
+/tarefas - Lista suas tarefas
+/tarefa [texto] - Adiciona tarefa
+/concluir [id] - Conclui tarefa
+
+*Finanças:*
+/gastos - Resumo de gastos
+/saldo - Ver saldo
+Ou diga: "Gastei 50 no mercado"
+
+*Agenda:*
+/agenda - Ver compromissos
+/lembrete [texto] - Criar lembrete
+
+*Boletos:*
+📄 Envie um PDF de boleto
+Eu extraio código de barras e vencimento!
+
+*Áudio:*
+🎤 Envie um áudio com seu comando
+Eu transcrevo e executo!
+
+*Outros:*
+/status - Status do sistema
+
+💡 Use linguagem natural!
+Ex: "Me lembra de pagar a conta amanhã"`;
+    }
+
+    return `🤖 Recebi sua mensagem: "${text}"
+
+⚠️ Para funcionar completamente, inicie o servidor Python:
+\`python api_server.py\`
+
+Ou digite /ajuda para ver os comandos básicos.`;
+}
+
+// Banner inicial
+console.log(`
+╔══════════════════════════════════════════════════╗
+║     📱 ASSISTENTE PESSOAL - WHATSAPP BOT        ║
+║                                                  ║
+║  🎤 Áudio: Transcrição automática               ║
+║  📄 PDF: Extração de boletos                    ║
+║  💬 Texto: Linguagem natural                    ║
+║                                                  ║
+║  Servidor: ${PYTHON_SERVER.padEnd(30)}║
+╚══════════════════════════════════════════════════╝
+`);
+
+// Inicia conexão
+connectToWhatsApp();

@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+ENV/
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# WhatsApp Bot - Auth
+whatsapp_bot/auth_info_baileys/
+whatsapp_bot/auth_info/
+whatsapp_bot/node_modules/
+
+# Data files - sensíveis
+data/*.json
+data/google_tokens/
+*.pickle
+*.db
+*.sqlite
+
+# Credenciais Google (NUNCA subir!)
+credentials.json
+data/credentials.json
+**/credentials.json
+**/token*.pickle
+
+# Logs
+*.log
+logs/
+
+# Temp files
+temp/
+tmp/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
