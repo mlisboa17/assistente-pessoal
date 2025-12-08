@@ -130,6 +130,10 @@ Consulte a documentação para mais detalhes.
                 del self.filtros_usuario[user_id]
             return await self._listar_emails_stream(user_id)
         
+        elif command == 'procurar_tudo':
+            # 🆕 Procura em TODAS as pastas quando não acha na INBOX
+            return await self._procurar_todas_pastas(user_id)
+        
         return """
 📧 *Comandos de E-mail:*
 
@@ -144,6 +148,7 @@ Consulte a documentação para mais detalhes.
 
 🔧 Controle:
 /emails - Menu inicial
+/procurar_tudo - Procurar em todas as pastas
 /parar - Parar leitura
 /reset - Resetar filtros
 """
@@ -271,20 +276,27 @@ Depois você pode:
         """
         Processa e-mails com progresso e resumo em tempo real
         Aplica filtros do usuário (quantidade, categoria, remetente)
+        
+        🆕 LÓGICA:
+        1. Busca PRIMEIRO apenas INBOX
+        2. Se não achar, pergunta se quer procurar em outras pastas
+        3. Se encontrar algo em SPAM, avisa ao usuário
         """
         
         try:
-            # Simula busca de e-mails (em produção, usa Gmail API)
-            emails = await self._buscar_emails_gmail(user_id)
+            # 🆕 Busca APENAS INBOX (pasta principal)
+            emails = await self._buscar_emails_inbox(user_id)
             
             if not emails:
+                # Nenhum e-mail na INBOX
                 return """
 📧 *Caixa de Entrada Vazia*
 
-Você não tem novos e-mails! 🎉
+Você não tem novos e-mails na INBOX! 🎉
 
-Quando receber novos e-mails, execute /emails
-e verei em tempo real para você.
+💡 Quer que eu procure nas outras pastas?
+/procurar_tudo - Procurar em ENVIADOS, ARQUIVO, RASCUNHOS, etc
+/reset - Voltar ao menu
 """
             
             # 🆕 APLICAR FILTROS
@@ -293,7 +305,7 @@ e verei em tempo real para você.
             
             if not emails:
                 return f"""
-📧 *Nenhum e-mail encontrado*
+📧 *Nenhum e-mail encontrado na INBOX*
 
 Com os filtros:
 • Quantidade: {filtros.get('quantidade', 10)}
@@ -302,14 +314,15 @@ Com os filtros:
 
 💡 Tente:
 /reset - Resetar filtros
+/procurar_tudo - Procurar em outras pastas
 /emails - Voltar ao menu
 """
             
             total = len(emails)
             self.progresso_leitura[user_id]['total'] = total
             
-            # 🆕 Construir resposta progressiva
-            resposta = self._montar_resposta_emails(user_id, emails)
+            # 🆕 Construir resposta progressiva (apenas INBOX)
+            resposta = self._montar_resposta_emails(user_id, emails, pasta_filtro="📥 INBOX")
             
             return resposta
             
@@ -349,11 +362,12 @@ Com os filtros:
         
         return emails_filtrados
     
-    def _montar_resposta_emails(self, user_id: str, emails: List[Email]) -> str:
+    def _montar_resposta_emails(self, user_id: str, emails: List[Email], pasta_filtro: str = None) -> str:
         """
         Monta resposta com:
         - Indicador de progresso
         - Filtros aplicados
+        - E-mails agrupados por PASTA (ou apenas uma pasta se filtrado)
         - Resumos dos e-mails
         - Botões interativos
         """
@@ -365,8 +379,11 @@ Com os filtros:
         # 🆕 Barra de progresso visual
         barra = self._gerar_barra_progresso(total, total)
         
+        # 🆕 Título dinâmico baseado na pasta
+        titulo = pasta_filtro if pasta_filtro else "📧 *Leitura de E-mails - TODAS AS PASTAS*"
+        
         resposta = f"""
-📧 *Leitura de E-mails* {barra}
+{titulo} {barra}
 
 🔄 Total: {total} e-mail(is) para ler
 """
@@ -382,19 +399,32 @@ Com os filtros:
                 resposta += f"  • Remetente: {filtros['remetente']}\n"
             resposta += "\n"
         
-        # Agrupar por categoria
-        por_categoria = self._agrupar_por_categoria(emails)
+        # 🆕 Agrupar por PASTA
+        por_pasta = self._agrupar_por_pasta(emails)
         
-        # 🆕 Mostrar cada categoria com resumos
-        for categoria, emails_cat in por_categoria.items():
-            resposta += f"\n{self._icone_categoria(categoria)} *{categoria.upper()}* ({len(emails_cat)})\n"
+        # 🆕 Mostrar cada pasta com seus e-mails
+        for pasta, emails_pasta in sorted(por_pasta.items()):
+            resposta += f"\n{pasta} ({len(emails_pasta)})\n"
+            resposta += "─" * 40 + "\n"
             
-            for i, email in enumerate(emails_cat[:3], 1):  # Primeiros 3 de cada
-                resposta += f"{i}. 📬 {email.assunto[:50]}\n"
-                resposta += f"   De: {email.de}\n"
-                if email.resumo:
-                    resposta += f"   📝 {email.resumo[:80]}...\n"
-                resposta += "\n"
+            # Agrupar por categoria dentro da pasta
+            por_categoria_pasta = {}
+            for email in emails_pasta:
+                cat = self._detectar_categoria(email)
+                if cat not in por_categoria_pasta:
+                    por_categoria_pasta[cat] = []
+                por_categoria_pasta[cat].append(email)
+            
+            # Mostrar por categoria dentro da pasta
+            for categoria, emails_cat in por_categoria_pasta.items():
+                resposta += f"  {self._icone_categoria(categoria)} {categoria.upper()} ({len(emails_cat)})\n"
+                
+                for i, email in enumerate(emails_cat[:2], 1):  # Primeiros 2 de cada
+                    resposta += f"    {i}. 📬 {email.assunto[:50]}\n"
+                    resposta += f"       De: {email.de}\n"
+                    if email.resumo:
+                        resposta += f"       📝 {email.resumo[:70]}...\n"
+                    resposta += "\n"
         
         # 🆕 Botões interativos
         resposta += """
@@ -410,11 +440,11 @@ Com os filtros:
 /parar - Parar a leitura
 /reset - Resetar filtros
 
-📊 *Resumo por categoria:*
+📊 *Resumo por Pasta:*
 """
         
-        for categoria, emails_cat in por_categoria.items():
-            resposta += f"• {categoria}: {len(emails_cat)}\n"
+        for pasta, emails_pasta in sorted(por_pasta.items()):
+            resposta += f"{pasta}: {len(emails_pasta)}\n"
         
         resposta += f"""
 ─────────────────────────────────
@@ -446,6 +476,41 @@ Com os filtros:
             if categoria not in grupos:
                 grupos[categoria] = []
             grupos[categoria].append(email)
+        
+        return grupos
+    
+    def _detectar_pasta(self, email_id: str) -> str:
+        """
+        🆕 Detecta em qual pasta do Gmail o e-mail está
+        """
+        # Baseado no ID do e-mail
+        if email_id.startswith('inbox_'):
+            return '📥 INBOX'
+        elif email_id.startswith('sent_'):
+            return '📤 ENVIADOS'
+        elif email_id.startswith('archive_'):
+            return '🗂️ ARQUIVO'
+        elif email_id.startswith('draft_'):
+            return '📝 RASCUNHOS'
+        elif email_id.startswith('spam_'):
+            return '🚫 SPAM'
+        elif email_id.startswith('trash_'):
+            return '🗑️ LIXO'
+        else:
+            return '📬 OUTROS'
+    
+    def _agrupar_por_pasta(self, emails: List[Email]) -> Dict[str, List[Email]]:
+        """
+        🆕 Agrupa e-mails por pasta (INBOX, SENT, ARCHIVE, etc)
+        """
+        grupos = {}
+        
+        for email in emails:
+            pasta = self._detectar_pasta(email.id)
+            
+            if pasta not in grupos:
+                grupos[pasta] = []
+            grupos[pasta].append(email)
         
         return grupos
     
@@ -492,15 +557,29 @@ Com os filtros:
     
     async def _buscar_emails_gmail(self, user_id: str) -> List[Email]:
         """
-        Busca e-mails do Gmail com progresso
-        Em produção, integraria com Gmail API
+        Busca e-mails do Gmail de TODAS as pastas
+        Em produção, integraria com Gmail API em múltiplas pastas
         """
         
-        # 🆕 Simula busca de e-mails
+        # 🆕 Simula busca de e-mails em múltiplas pastas
         # Em produção, seria:
         # credentials = self.google_auth.get_credentials(user_id)
         # service = self.google_auth.get_gmail_service(credentials)
-        # results = service.users().messages().list(userId='me', maxResults=10).execute()
+        # 
+        # PASTAS_GMAIL = ['INBOX', 'SENT', 'DRAFTS', 'ARCHIVE', 'TRASH']
+        # all_emails = []
+        # for pasta in PASTAS_GMAIL:
+        #     results = service.users().messages().list(
+        #         userId='me',
+        #         labelIds=LABEL_MAP[pasta],
+        #         maxResults=100
+        #     ).execute()
+        #     for msg in results.get('messages', []):
+        #         email = service.users().messages().get(
+        #             userId='me',
+        #             id=msg['id']
+        #         ).execute()
+        #         all_emails.append(parse_email(email))
         
         # Por enquanto, retorna exemplo estruturado
         emails_simulados = [
@@ -568,6 +647,237 @@ Com os filtros:
         
         return emails_simulados
     
+    async def _buscar_emails_inbox(self, user_id: str) -> List[Email]:
+        """
+        🆕 Busca e-mails APENAS da INBOX (pasta principal)
+        
+        Esta é a busca padrão. Se não achar nada,
+        pergunta ao usuário se quer procurar em outras pastas.
+        """
+        
+        emails_inbox = [
+            Email(
+                id="inbox_1",
+                de="chefe@empresa.com",
+                para="voce@gmail.com",
+                assunto="Reunião urgente hoje às 14:00 - Projeto X",
+                corpo="Preciso discutir os últimos desenvolvimentos do projeto X. Será uma reunião curta mas importante.",
+                data=datetime.now().isoformat(),
+                resumo="Reunião urgente sobre projeto X hoje às 14h",
+                categoria="trabalho"
+            ),
+            Email(
+                id="inbox_2",
+                de="noreply@amazon.com.br",
+                para="voce@gmail.com",
+                assunto="📦 Seu pedido foi entregue!",
+                corpo="Seu pedido chegou! Aproveite a entrega e acompanhe nos próximos passos.",
+                data=(datetime.now() - timedelta(hours=2)).isoformat(),
+                resumo="Pedido Amazon entregue",
+                categoria="notificacao"
+            ),
+            Email(
+                id="inbox_3",
+                de="amigo@hotmail.com",
+                para="voce@gmail.com",
+                assunto="Ô, bora tomar um café no fim de semana?",
+                corpo="Tá afim de tomar um café comigo no sábado? Tem um lugar novo que quero te mostrar.",
+                data=(datetime.now() - timedelta(hours=5)).isoformat(),
+                resumo="Convite para café no sábado",
+                categoria="pessoal"
+            ),
+            Email(
+                id="inbox_4",
+                de="noreply@shopee.com.br",
+                para="voce@gmail.com",
+                assunto="🎉 MEGA DESCONTO: Até 70% de desconto em eletrônicos!",
+                corpo="Aproveite esta oferta especial! Eletrônicos com até 70% de desconto. Válido por poucas horas!",
+                data=(datetime.now() - timedelta(hours=8)).isoformat(),
+                resumo="Promoção eletrônicos 70% desconto",
+                categoria="promotional"
+            ),
+            Email(
+                id="inbox_5",
+                de="banco@bancoxx.com.br",
+                para="voce@gmail.com",
+                assunto="⚠️ Alerta de Segurança: Acesso Não Autorizado",
+                corpo="Detectamos uma tentativa de acesso à sua conta. Se não foi você, clique aqui para verificar.",
+                data=(datetime.now() - timedelta(hours=12)).isoformat(),
+                resumo="Alerta de segurança - verificar imediatamente",
+                categoria="importante"
+            ),
+        ]
+        
+        # Simula leitura progressiva
+        for i, email in enumerate(emails_inbox):
+            if user_id in self.progresso_leitura:
+                if self.progresso_leitura[user_id]['parado']:
+                    break
+                
+                self.progresso_leitura[user_id]['processados'] = i + 1
+                await asyncio.sleep(0.5)
+        
+        return emails_inbox
+    
+    async def _buscar_emails_todas_pastas(self, user_id: str) -> List[Email]:
+        """
+        🆕 Busca e-mails de TODAS as pastas do Gmail
+        
+        Em produção, busca em:
+        - INBOX (principal)
+        - SENT (enviados)
+        - DRAFTS (rascunhos)
+        - ARCHIVE (arquivo)
+        - TRASH (lixo)
+        - SPAM (spam)
+        - LABELS (etiquetas customizadas)
+        """
+        
+        # 🆕 Lista completa de e-mails de todas as pastas
+        emails_todas_pastas = [
+            # ========== INBOX ==========
+            Email(
+                id="inbox_1",
+                de="chefe@empresa.com",
+                para="voce@gmail.com",
+                assunto="Reunião urgente hoje às 14:00 - Projeto X",
+                corpo="Preciso discutir os últimos desenvolvimentos do projeto X. Será uma reunião curta mas importante.",
+                data=datetime.now().isoformat(),
+                resumo="Reunião urgente sobre projeto X hoje às 14h",
+                categoria="trabalho"
+            ),
+            Email(
+                id="inbox_2",
+                de="noreply@amazon.com.br",
+                para="voce@gmail.com",
+                assunto="📦 Seu pedido foi entregue!",
+                corpo="Seu pedido chegou! Aproveite a entrega e acompanhe nos próximos passos.",
+                data=(datetime.now() - timedelta(hours=2)).isoformat(),
+                resumo="Pedido Amazon entregue",
+                categoria="notificacao"
+            ),
+            Email(
+                id="inbox_3",
+                de="amigo@hotmail.com",
+                para="voce@gmail.com",
+                assunto="Ô, bora tomar um café no fim de semana?",
+                corpo="Tá afim de tomar um café comigo no sábado? Tem um lugar novo que quero te mostrar.",
+                data=(datetime.now() - timedelta(hours=5)).isoformat(),
+                resumo="Convite para café no sábado",
+                categoria="pessoal"
+            ),
+            Email(
+                id="inbox_4",
+                de="noreply@shopee.com.br",
+                para="voce@gmail.com",
+                assunto="🎉 MEGA DESCONTO: Até 70% de desconto em eletrônicos!",
+                corpo="Aproveite esta oferta especial! Eletrônicos com até 70% de desconto. Válido por poucas horas!",
+                data=(datetime.now() - timedelta(hours=8)).isoformat(),
+                resumo="Promoção eletrônicos 70% desconto",
+                categoria="promotional"
+            ),
+            Email(
+                id="inbox_5",
+                de="banco@bancoxx.com.br",
+                para="voce@gmail.com",
+                assunto="⚠️ Alerta de Segurança: Acesso Não Autorizado",
+                corpo="Detectamos uma tentativa de acesso à sua conta. Se não foi você, clique aqui para verificar.",
+                data=(datetime.now() - timedelta(hours=12)).isoformat(),
+                resumo="Alerta de segurança - verificar imediatamente",
+                categoria="importante"
+            ),
+            
+            # ========== SENT (ENVIADOS) ==========
+            Email(
+                id="sent_1",
+                de="voce@gmail.com",
+                para="chefe@empresa.com",
+                assunto="RE: Reunião urgente hoje às 14:00",
+                corpo="Confirmado! Estarei lá pontualmente. Muito obrigado pelas informações antecipadas.",
+                data=(datetime.now() - timedelta(days=1)).isoformat(),
+                resumo="Confirmação de reunião enviada",
+                categoria="trabalho"
+            ),
+            Email(
+                id="sent_2",
+                de="voce@gmail.com",
+                para="amigo@hotmail.com",
+                assunto="RE: Café no sábado",
+                corpo="Ótimo! Adoraria ir! Que horas e em qual lugar?",
+                data=(datetime.now() - timedelta(days=2)).isoformat(),
+                resumo="Confirmação de encontro enviada",
+                categoria="pessoal"
+            ),
+            
+            # ========== ARCHIVE (ARQUIVO) ==========
+            Email(
+                id="archive_1",
+                de="cliente@empresa-xyz.com",
+                para="voce@gmail.com",
+                assunto="Feedback do projeto anterior - Muito bom!",
+                corpo="Apenas queria parabenizá-lo pelo excelente trabalho realizado. O projeto ficou ótimo!",
+                data=(datetime.now() - timedelta(days=7)).isoformat(),
+                resumo="Feedback positivo de cliente",
+                categoria="importante"
+            ),
+            Email(
+                id="archive_2",
+                de="rh@empresa.com",
+                para="voce@gmail.com",
+                assunto="Comunicado: Novo horário de trabalho a partir de janeiro",
+                corpo="Informamos que a partir de janeiro o horário de trabalho será das 8h às 17h.",
+                data=(datetime.now() - timedelta(days=14)).isoformat(),
+                resumo="Novo horário de trabalho",
+                categoria="notificacao"
+            ),
+            
+            # ========== DRAFTS (RASCUNHOS) ==========
+            Email(
+                id="draft_1",
+                de="voce@gmail.com",
+                para="gerente@empresa.com",
+                assunto="[RASCUNHO] Proposta de aumento de orçamento",
+                corpo="Olá, gostaria de propor um aumento de 15% no orçamento para o próximo trimestre...",
+                data=(datetime.now() - timedelta(hours=3)).isoformat(),
+                resumo="Rascunho: proposta de orçamento",
+                categoria="trabalho"
+            ),
+            
+            # ========== SPAM ==========
+            Email(
+                id="spam_1",
+                de="noreply@viagra-melhor-preco.com",
+                para="voce@gmail.com",
+                assunto="ASSINE JÁ!!! Medicamentos com 90% de desconto!!",
+                corpo="Compre agora! Não perca! Envio grátis para todo o Brasil!",
+                data=(datetime.now() - timedelta(days=1)).isoformat(),
+                resumo="Spam: medicamentos",
+                categoria="spam"
+            ),
+            Email(
+                id="spam_2",
+                de="noreply@loteria-milionaria.com",
+                para="voce@gmail.com",
+                assunto="🎰 PARABÉNS!!! Você ganhou 1 MILHÃO DE REAIS!",
+                corpo="Clique aqui para resgatar seu prêmio de 1 milhão de reais!",
+                data=(datetime.now() - timedelta(days=2)).isoformat(),
+                resumo="Spam: fraude loteria",
+                categoria="spam"
+            ),
+        ]
+        
+        # Simula leitura progressiva de todas as pastas
+        for i, email in enumerate(emails_todas_pastas):
+            if user_id in self.progresso_leitura:
+                if self.progresso_leitura[user_id]['parado']:
+                    break
+                
+                # Simula tempo de leitura
+                self.progresso_leitura[user_id]['processados'] = i + 1
+                await asyncio.sleep(0.3)  # Simula processamento mais rápido
+        
+        return emails_todas_pastas
+    
     async def _parar_leitura(self, user_id: str) -> str:
         """Permite ao usuário parar a leitura de e-mails"""
         if user_id in self.progresso_leitura:
@@ -584,6 +894,168 @@ Você pode:
 ✅ /importante - Filtrar apenas importantes
 ✅ /emails - Recomeçar do zero
 """
+    
+    async def _procurar_todas_pastas(self, user_id: str) -> str:
+        """
+        🆕 Procura em TODAS as pastas quando não achou na INBOX
+        Busca em: ENVIADOS, ARQUIVO, RASCUNHOS, SPAM, LIXO, etc
+        Avisa se encontra algo no SPAM
+        """
+        
+        # Busca em todas as pastas
+        emails_todas = await self._buscar_emails_todas_pastas(user_id)
+        
+        if not emails_todas:
+            return """
+📧 *Nenhum E-mail Encontrado*
+
+Procuramos em:
+• 📥 INBOX
+• 📤 ENVIADOS
+• 🗂️ ARQUIVO
+• 📝 RASCUNHOS
+• 🚫 SPAM
+• 🗑️ LIXO
+
+E não encontramos nenhum e-mail! 😅
+
+💡 Dica: Configure um filtro:
+/importante - Ver só importante
+/trabalho - Ver só trabalho
+/emails - Menu inicial
+"""
+        
+        # Aplicar filtros se existirem
+        filtros = self.filtros_usuario.get(user_id, {})
+        emails = self._aplicar_filtros_emails(emails_todas, filtros)
+        
+        if not emails:
+            return f"""
+📧 *Nenhum e-mail encontrado com os filtros*
+
+Procuramos em TODAS as pastas:
+• 📥 INBOX
+• 📤 ENVIADOS
+• 🗂️ ARQUIVO
+• 📝 RASCUNHOS
+• 🚫 SPAM
+• 🗑️ LIXO
+
+Mas nenhum corresponde aos filtros:
+• Quantidade: {filtros.get('quantidade', 10)}
+• Categoria: {filtros.get('categoria', 'Todas')}
+• Remetente: {filtros.get('remetente', 'Qualquer um')}
+
+💡 Tente:
+/reset - Resetar filtros
+/procurar_tudo - Procurar sem filtros
+"""
+        
+        total = len(emails)
+        self.progresso_leitura[user_id]['total'] = total
+        
+        # 🆕 Preparar resposta agrupada por pasta
+        resposta = self._montar_resposta_emails_com_pastas(user_id, emails)
+        
+        return resposta
+    
+    def _montar_resposta_emails_com_pastas(self, user_id: str, emails: List[Email]) -> str:
+        """
+        🆕 Monta resposta mostrando e-mails de TODAS as pastas
+        E avisa se algum veio do SPAM
+        """
+        
+        total = len(emails)
+        progresso = self.progresso_leitura.get(user_id, {'inicio': datetime.now()})
+        filtros = self.filtros_usuario.get(user_id, {})
+        
+        barra = self._gerar_barra_progresso(total, total)
+        
+        resposta = f"""
+📧 *Leitura de E-mails - TODAS AS PASTAS* {barra}
+
+🔄 Total: {total} e-mail(is)
+"""
+        
+        # Mostrar filtros se aplicados
+        if filtros:
+            resposta += "\n🔍 *Filtros Aplicados:*\n"
+            if filtros.get('quantidade'):
+                resposta += f"  • Quantidade: {filtros['quantidade']}\n"
+            if filtros.get('categoria'):
+                resposta += f"  • Categoria: {filtros['categoria'].upper()}\n"
+            if filtros.get('remetente'):
+                resposta += f"  • Remetente: {filtros['remetente']}\n"
+            resposta += "\n"
+        
+        # Agrupar por pasta
+        por_pasta = self._agrupar_por_pasta(emails)
+        
+        # 🆕 Variável para rastrear SPAMs encontrados
+        spam_encontrados = []
+        
+        # Mostrar cada pasta
+        for pasta, emails_pasta in sorted(por_pasta.items()):
+            resposta += f"\n{pasta} ({len(emails_pasta)})\n"
+            resposta += "─" * 40 + "\n"
+            
+            # Agrupar por categoria dentro da pasta
+            por_categoria = {}
+            for email in emails_pasta:
+                cat = self._detectar_categoria(email)
+                if cat not in por_categoria:
+                    por_categoria[cat] = []
+                por_categoria[cat].append(email)
+                
+                # 🆕 Rastrear SPAMs
+                if pasta == "🚫 SPAM":
+                    spam_encontrados.append(email)
+            
+            # Mostrar categorias dentro da pasta
+            for categoria, emails_cat in por_categoria.items():
+                resposta += f"  {self._icone_categoria(categoria)} {categoria.upper()} ({len(emails_cat)})\n"
+                
+                for i, email in enumerate(emails_cat[:2], 1):
+                    resposta += f"    {i}. 📬 {email.assunto[:50]}\n"
+                    resposta += f"       De: {email.de}\n"
+                    if email.resumo:
+                        resposta += f"       📝 {email.resumo[:70]}...\n"
+                    resposta += "\n"
+        
+        # 🆕 AVISO SE ENCONTROU ALGO NO SPAM
+        if spam_encontrados:
+            resposta += """
+⚠️ *ATENÇÃO - E-mails no SPAM:*
+"""
+            for email in spam_encontrados:
+                resposta += f"  🚫 {email.assunto[:50]}\n"
+                resposta += f"     De: {email.de}\n"
+            resposta += """
+💡 Verifique o SPAM - pode ter e-mails importantes marcados incorretamente!
+/importante - Ver apenas importantes
+/parar - Parar a leitura
+"""
+        
+        # Botões interativos
+        resposta += """
+─────────────────────────────────
+🎯 *Opções:*
+/importante - Filtrar importantes
+/trabalho - Filtrar trabalho
+/pessoal - Filtrar pessoal
+/5emails - Ver apenas 5
+/10emails - Ver 10
+/20emails - Ver 20
+/parar - Parar leitura
+/reset - Resetar filtros
+/emails - Menu inicial
+
+─────────────────────────────────
+⏱️ Tempo: """ + self._calcular_tempo_decorrido(user_id) + """
+✅ Pronto para interagir!
+"""
+        
+        return resposta
     
     async def _buscar_email(self, user_id: str, termo: str) -> str:
         """Busca e-mails por termo com indicador de progresso"""
