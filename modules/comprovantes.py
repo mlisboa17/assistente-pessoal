@@ -1,10 +1,11 @@
 """
 🧾 Módulo de Processamento de Comprovantes
 Reconhece e categoriza despesas a partir de imagens de:
-- Comprovantes de pagamento
-- PIX
+- Comprovantes de pagamento (PIX, Transferências)
+- Boletos pagos
 - Recibos
 - Notas fiscais
+Usa extractores brasileiros e OCR (gratuito) para extração
 """
 import json
 import os
@@ -14,6 +15,29 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass, asdict
 import hashlib
+
+# Sinônimos para extração melhorada
+from modules.sinonimos_documentos import (
+    criar_prompt_extracao_melhorado,
+    identificar_tipo_documento,
+    extrair_com_sinonimos,
+    SINONIMOS_VALOR,
+    SINONIMOS_BENEFICIARIO,
+    SINONIMOS_PAGADOR,
+)
+
+# Extractores e OCR
+try:
+    from modules.extrator_brasil import ExtratorDocumentosBrasil
+    EXTRATOR_BRASIL_AVAILABLE = True
+except ImportError:
+    EXTRATOR_BRASIL_AVAILABLE = False
+
+try:
+    from modules.ocr_engine import OCREngine
+    OCR_ENGINE_AVAILABLE = True
+except ImportError:
+    OCR_ENGINE_AVAILABLE = False
 
 
 @dataclass
@@ -798,6 +822,262 @@ Para editar, envie no formato:
 `desc:Nova descrição` - Para alterar descrição
 
 Ou digite *SIM* para confirmar como está."""
+    
+    def processar_imagem_com_gemini_vision(self, image_data: bytes, user_id: str) -> Dict[str, Any]:
+        """
+        Processa comprovante usando extractores brasileiros e OCR (gratuito)
+        
+        Extrai com alta precisão:
+        - BENEFICIÁRIO: quem recebe o pagamento
+        - PAGADOR: quem paga  
+        - VALOR: montante
+        - TODO O DOCUMENTO: tipo, data, dados bancários, etc
+        
+        Usa bibliotecas open-source em vez de APIs pagas
+        """
+        try:
+            # === MÉTODO 1: EXTRATOR BRASIL (PIX, Transferências, Boletos) ===
+            if EXTRATOR_BRASIL_AVAILABLE:
+                try:
+                    extrator = ExtratorDocumentosBrasil()
+                    
+                    # Tenta extrair PIX
+                    resultado_pix = extrator.extrair_pix_imagem(image_data)
+                    if resultado_pix and resultado_pix.valor > 0:
+                        print(f"[EXTRATOR] PIX identificado: {resultado_pix.valor}")
+                        return self._converter_pix_extrator(resultado_pix, user_id)
+                    
+                    # Tenta extrair transferência
+                    resultado_transf = extrator.extrair_transferencia_imagem(image_data)
+                    if resultado_transf and resultado_transf.valor > 0:
+                        print(f"[EXTRATOR] Transferência identificada: {resultado_transf.valor}")
+                        return self._converter_transferencia_extrator(resultado_transf, user_id)
+                    
+                    # Tenta extrair boleto
+                    resultado_boleto = extrator.extrair_boleto_imagem(image_data)
+                    if resultado_boleto and resultado_boleto.valor > 0:
+                        print(f"[EXTRATOR] Boleto identificado: {resultado_boleto.valor}")
+                        return self._converter_boleto_extrator(resultado_boleto, user_id)
+                        
+                except Exception as e:
+                    print(f"[EXTRATOR-BRASIL] Erro: {e}")
+            
+            # === MÉTODO 2: OCR + SINÔNIMOS (Fallback) ===
+            if OCR_ENGINE_AVAILABLE:
+                try:
+                    ocr = OCREngine()
+                    texto = ocr.extrair_texto_imagem(image_data)
+                    
+                    if texto:
+                        print(f"[OCR] Texto extraído ({len(texto)} caracteres)")
+                        
+                        # Identifica tipo de documento
+                        tipo_doc = identificar_tipo_documento(texto)
+                        
+                        # Extrai informações usando sinônimos
+                        dados = self._extrair_com_sinonimos_ocr(texto, tipo_doc)
+                        
+                        if dados.get('valor', 0) > 0:
+                            return self._converter_dados_ocr(dados, user_id)
+                            
+                except Exception as e:
+                    print(f"[OCR] Erro: {e}")
+            
+            return {'erro': 'Não foi possível processar a imagem'}
+            
+        except Exception as e:
+            print(f"[PROCESSAMENTO] Erro geral: {e}")
+            return {'erro': f'Erro ao processar: {str(e)[:50]}'}
+    
+    def _extrair_com_sinonimos_ocr(self, texto: str, tipo_doc: str) -> Dict[str, Any]:
+        """Extrai dados do texto OCR usando sinônimos"""
+        dados = {
+            'tipo': tipo_doc,
+            'valor': 0.0,
+            'beneficiario': '',
+            'pagador': '',
+            'descricao': '',
+        }
+        
+        # Extrai valor
+        valor_matches = extrair_com_sinonimos(texto, 'valor')
+        if valor_matches:
+            for match in valor_matches:
+                # Procura número após a palavra-chave
+                padrao = f"{re.escape(match)}[\\s:]*R?\\$?[\\s]*([\\d.,]+)"
+                encontro = re.search(padrao, texto, re.IGNORECASE)
+                if encontro:
+                    valor_str = encontro.group(1).replace(',', '.')
+                    try:
+                        dados['valor'] = float(valor_str)
+                        break
+                    except:
+                        pass
+        
+        # Extrai beneficiário
+        ben_matches = extrair_com_sinonimos(texto, 'beneficiario')
+        if ben_matches:
+            for match in ben_matches:
+                padrao = f"{re.escape(match)}[:\\s]*([^\\n]+)"
+                encontro = re.search(padrao, texto, re.IGNORECASE)
+                if encontro:
+                    nome = encontro.group(1).strip()
+                    if len(nome) > 3 and len(nome) < 100:
+                        dados['beneficiario'] = nome[:50]
+                        break
+        
+        # Extrai pagador
+        pag_matches = extrair_com_sinonimos(texto, 'pagador')
+        if pag_matches:
+            for match in pag_matches:
+                padrao = f"{re.escape(match)}[:\\s]*([^\\n]+)"
+                encontro = re.search(padrao, texto, re.IGNORECASE)
+                if encontro:
+                    nome = encontro.group(1).strip()
+                    if len(nome) > 3 and len(nome) < 100:
+                        dados['pagador'] = nome[:50]
+                        break
+        
+        # Cria descrição
+        dados['descricao'] = f"{tipo_doc.upper()} - {dados.get('beneficiario', 'Não identificado')}"
+        
+        return dados
+    
+    def _converter_dados_ocr(self, dados: Dict, user_id: str) -> Dict[str, Any]:
+        """Converte dados do OCR para comprovante"""
+        comp_id = self._gerar_id(f"{dados.get('beneficiario')}_{datetime.now().isoformat()}")
+        
+        tipo = dados.get('tipo', 'outro')
+        categoria, confianca = self._sugerir_categoria(dados.get('descricao', ''), dados.get('beneficiario', ''))
+        
+        comprovante = ComprovanteExtraido(
+            id=comp_id,
+            tipo=tipo,
+            valor=dados.get('valor', 0),
+            descricao=dados.get('descricao', ''),
+            data=datetime.now().strftime('%Y-%m-%d'),
+            destinatario=dados.get('beneficiario', ''),
+            origem=dados.get('pagador', ''),
+            categoria_sugerida=categoria,
+            confianca=confianca * 0.8,  # OCR é menos confiável
+            texto_original=json.dumps(dados),
+            user_id=user_id,
+            status='pendente',
+            criado_em=datetime.now().isoformat()
+        )
+        
+        comp_dict = comprovante.to_dict()
+        self.pendentes[user_id] = comp_dict
+        self._save_pendentes()
+        
+        return comp_dict
+    
+    def _converter_pix_extrator(self, resultado: Any, user_id: str) -> Dict[str, Any]:
+        """Converte dados do extrator PIX para comprovante"""
+        comp_id = self._gerar_id(resultado.id_transacao or str(datetime.now()))
+        
+        if resultado.tipo_transacao == 'enviado':
+            descricao = f"PIX enviado para {resultado.destino_nome}"
+            destinatario = resultado.destino_nome
+        else:
+            descricao = f"PIX recebido de {resultado.origem_nome}"
+            destinatario = resultado.origem_nome
+        
+        categoria, confianca = self._sugerir_categoria(descricao, destinatario)
+        
+        comprovante = ComprovanteExtraido(
+            id=comp_id,
+            tipo='pix',
+            valor=resultado.valor,
+            descricao=descricao,
+            data=resultado.data_hora[:10] if resultado.data_hora else datetime.now().strftime('%Y-%m-%d'),
+            destinatario=destinatario,
+            categoria_sugerida=categoria,
+            confianca=confianca,
+            texto_original=resultado.id_transacao or '',
+            user_id=user_id,
+            status='pendente',
+            criado_em=datetime.now().isoformat()
+        )
+        
+        comp_dict = comprovante.to_dict()
+        comp_dict['pix_dados'] = {
+            'chave_pix': resultado.chave_pix or '',
+            'tipo_chave': resultado.tipo_chave or '',
+            'id_transacao': resultado.id_transacao or '',
+        }
+        
+        self.pendentes[user_id] = comp_dict
+        self._save_pendentes()
+        
+        return comp_dict
+    
+    def _converter_transferencia_extrator(self, resultado: Any, user_id: str) -> Dict[str, Any]:
+        """Converte dados do extrator de transferência para comprovante"""
+        comp_id = self._gerar_id(resultado.id_transacao or str(datetime.now()))
+        
+        descricao = f"{resultado.tipo} para {resultado.destino_nome}"
+        
+        comprovante = ComprovanteExtraido(
+            id=comp_id,
+            tipo='transferencia',
+            valor=resultado.valor,
+            descricao=descricao,
+            data=resultado.data_hora[:10] if resultado.data_hora else datetime.now().strftime('%Y-%m-%d'),
+            destinatario=resultado.destino_nome,
+            categoria_sugerida='outros',
+            confianca=resultado.confianca / 100 if resultado.confianca else 0.8,
+            texto_original=resultado.id_transacao or '',
+            user_id=user_id,
+            status='pendente',
+            criado_em=datetime.now().isoformat()
+        )
+        
+        comp_dict = comprovante.to_dict()
+        comp_dict['transferencia_dados'] = {
+            'banco_destino': resultado.destino_banco or '',
+            'agencia_destino': resultado.destino_agencia or '',
+            'conta_destino': resultado.destino_conta or '',
+        }
+        
+        self.pendentes[user_id] = comp_dict
+        self._save_pendentes()
+        
+        return comp_dict
+    
+    def _converter_boleto_extrator(self, resultado: Any, user_id: str) -> Dict[str, Any]:
+        """Converte dados do extrator de boleto para comprovante"""
+        comp_id = self._gerar_id(resultado.linha_digitavel or str(datetime.now()))
+        
+        descricao = f"Boleto - {resultado.beneficiario}"
+        
+        comprovante = ComprovanteExtraido(
+            id=comp_id,
+            tipo='boleto',
+            valor=resultado.valor,
+            descricao=descricao,
+            data=resultado.vencimento[:10] if resultado.vencimento else datetime.now().strftime('%Y-%m-%d'),
+            destinatario=resultado.beneficiario,
+            categoria_sugerida='outros',
+            confianca=resultado.confianca / 100 if resultado.confianca else 0.85,
+            texto_original=resultado.linha_digitavel or '',
+            user_id=user_id,
+            status='pendente',
+            criado_em=datetime.now().isoformat()
+        )
+        
+        comp_dict = comprovante.to_dict()
+        comp_dict['boleto_dados'] = {
+            'linha_digitavel': resultado.linha_digitavel or '',
+            'codigo_barras': resultado.codigo_barras or '',
+            'banco': resultado.banco or '',
+            'vencimento': resultado.vencimento or '',
+        }
+        
+        self.pendentes[user_id] = comp_dict
+        self._save_pendentes()
+        
+        return comp_dict
     
     def _listar_comprovantes(self, user_id: str) -> str:
         """Lista comprovantes salvos do usuário"""

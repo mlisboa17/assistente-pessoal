@@ -1,7 +1,7 @@
 """
 📄 Módulo de Faturas e Boletos
 Processa PDFs de boletos e extrai informações automaticamente
-Usa Gemini Vision (IA) para melhor precisão
+Usa OCR e extractores especializados brasileiros (gratuito)
 """
 import os
 import re
@@ -10,6 +10,32 @@ import base64
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
+
+# Sinônimos para extração melhorada
+from modules.sinonimos_documentos import (
+    criar_prompt_extracao_melhorado,
+    identificar_tipo_documento,
+    extrair_com_sinonimos
+)
+
+# Extractores brasileiros e OCR
+try:
+    from modules.extrator_brasil import ExtratorDocumentosBrasil
+    EXTRATOR_BRASIL_AVAILABLE = True
+except ImportError:
+    EXTRATOR_BRASIL_AVAILABLE = False
+
+try:
+    from modules.ocr_engine import OCREngine
+    OCR_ENGINE_AVAILABLE = True
+except ImportError:
+    OCR_ENGINE_AVAILABLE = False
+
+try:
+    from modules.extrator_documentos import ExtratorDocumentos
+    EXTRATOR_DOCUMENTOS_AVAILABLE = True
+except ImportError:
+    EXTRATOR_DOCUMENTOS_AVAILABLE = False
 
 # Para processar PDFs
 try:
@@ -168,48 +194,79 @@ E posso agendar automaticamente na sua agenda!
             return f"❌ Formato não suportado: {ext}\nEnvie um PDF ou imagem."
     
     async def _processar_pdf(self, arquivo: str, user_id: str) -> str:
-        """Processa PDF de boleto usando Gemini Vision (IA) ou métodos tradicionais"""
+        """Processa PDF de boleto usando extractores brasileiros (gratuito)"""
         texto = ""
-        dados_ia = None
+        dados_ext = None
         
-        # Verifica se deve usar Gemini (configuração)
-        usar_gemini = os.getenv('USAR_GEMINI', 'True').lower() == 'true'
-        
-        # === MÉTODO 1: GEMINI VISION (IA - Mais preciso) ===
-        if GEMINI_AVAILABLE and usar_gemini:
+        # === MÉTODO 1: EXTRATOR BRASIL (Especializado em documentos brasileiros) ===
+        if EXTRATOR_BRASIL_AVAILABLE:
             try:
-                dados_ia = await self._extrair_com_gemini(arquivo)
-                if dados_ia and (dados_ia.get('valor') or dados_ia.get('linha_digitavel')):
-                    print(f"[GEMINI] Dados extraídos com sucesso: {dados_ia}")
+                extrator = ExtratorDocumentosBrasil()
+                
+                # Lê o PDF como bytes
+                with open(arquivo, 'rb') as f:
+                    pdf_bytes = f.read()
+                
+                # Tenta extrair boleto
+                dados_ext = extrator.extrair_boleto_pdf(pdf_bytes)
+                
+                if dados_ext and (dados_ext.valor > 0 or dados_ext.linha_digitavel):
+                    print(f"[EXTRATOR-BRASIL] Boleto extraído: valor={dados_ext.valor}, linha_digitavel={dados_ext.linha_digitavel[:20]}")
+                    
+                    # Converte dataclass para dict
+                    dados = {
+                        'tipo': 'boleto',
+                        'valor': dados_ext.valor,
+                        'linha_digitavel': dados_ext.linha_digitavel,
+                        'codigo_barras': dados_ext.codigo_barras,
+                        'vencimento': dados_ext.vencimento,
+                        'beneficiario': dados_ext.beneficiario,
+                        'pagador': dados_ext.pagador,
+                        'descricao': f"Boleto - {dados_ext.beneficiario}",
+                        'cnpj_cpf': dados_ext.beneficiario_cnpj,
+                        'banco': dados_ext.banco,
+                    }
+                    return await self._processar_dados_boleto(dados, arquivo, user_id)
             except Exception as e:
-                print(f"[GEMINI] Erro: {e}")
-                import traceback
-                traceback.print_exc()
-        elif not usar_gemini:
-            print("[GEMINI] Desabilitado por configuração (USAR_GEMINI=False)")
+                print(f"[EXTRATOR-BRASIL] Erro: {e}")
         
-        # === MÉTODO 2: EXTRAÇÃO DE TEXTO TRADICIONAL (Fallback) ===
-        if not dados_ia:
-            # Tenta com pdfplumber primeiro (melhor para boletos)
-            if PDF_AVAILABLE:
-                try:
-                    with pdfplumber.open(arquivo) as pdf:
-                        for page in pdf.pages:
-                            texto += page.extract_text() or ""
-                except Exception as e:
-                    print(f"Erro pdfplumber: {e}")
-            
-            # Fallback para PyPDF2
-            if not texto and PYPDF2_AVAILABLE:
-                try:
-                    reader = PdfReader(arquivo)
-                    for page in reader.pages:
+        # === MÉTODO 2: EXTRATOR DE DOCUMENTOS (Impostos, extratos, etc) ===
+        if EXTRATOR_DOCUMENTOS_AVAILABLE:
+            try:
+                extrator = ExtratorDocumentos()
+                
+                with open(arquivo, 'rb') as f:
+                    pdf_bytes = f.read()
+                
+                # Tenta diferentes tipos de documentos
+                dados_ext = extrator.extrair_automaticamente(pdf_bytes)
+                
+                if dados_ext:
+                    print(f"[EXTRATOR-DOCUMENTOS] Documento extraído: {dados_ext}")
+                    return await self._processar_dados_boleto(dados_ext, arquivo, user_id)
+            except Exception as e:
+                print(f"[EXTRATOR-DOCUMENTOS] Erro: {e}")
+        
+        # === MÉTODO 3: EXTRAÇÃO DE TEXTO TRADICIONAL (Fallback) ===
+        if PDF_AVAILABLE:
+            try:
+                with pdfplumber.open(arquivo) as pdf:
+                    for page in pdf.pages:
                         texto += page.extract_text() or ""
-                except Exception as e:
-                    print(f"Erro PyPDF2: {e}")
+            except Exception as e:
+                print(f"Erro pdfplumber: {e}")
+        
+        # Fallback para PyPDF2
+        if not texto and PYPDF2_AVAILABLE:
+            try:
+                reader = PdfReader(arquivo)
+                for page in reader.pages:
+                    texto += page.extract_text() or ""
+            except Exception as e:
+                print(f"Erro PyPDF2: {e}")
         
         # Se não conseguiu extrair nada
-        if not texto and not dados_ia:
+        if not texto:
             return """
 ❌ Não consegui ler o PDF.
 
@@ -221,11 +278,8 @@ Possíveis motivos:
 💡 *Dica:* Tente enviar como imagem (foto/print do boleto).
 """
         
-        # Usa dados da IA se disponíveis, senão extrai do texto
-        if dados_ia:
-            dados = dados_ia
-        else:
-            dados = self._extrair_dados_boleto(texto)
+        # Extrai dados do texto
+        dados = self._extrair_dados_boleto(texto)
         
         if not dados.get('valor') and not dados.get('linha_digitavel'):
             return f"""
@@ -239,59 +293,7 @@ Texto extraído (primeiros 500 caracteres):
 💡 *Dica:* Se for um boleto escaneado, tente enviar como foto.
 """
         
-        # Salva o boleto/imposto
-        from uuid import uuid4
-        boleto = Boleto(
-            id=str(uuid4())[:8],
-            valor=dados.get('valor') or 0,
-            codigo_barras=dados.get('codigo_barras') or "",
-            linha_digitavel=dados.get('linha_digitavel') or "",
-            vencimento=dados.get('vencimento') or "",
-            beneficiario=dados.get('beneficiario') or "Não identificado",
-            pagador=dados.get('pagador') or "Não identificado",
-            descricao=dados.get('descricao') or "Boleto",
-            arquivo_origem=os.path.basename(arquivo),
-            user_id=user_id,
-            extraido_em=datetime.now().isoformat(),
-            pago=False,
-            agendado=False,
-            tipo=dados.get('tipo', 'boleto'),
-            periodo_apuracao=dados.get('periodo_apuracao') or "",
-            codigo_receita=dados.get('codigo_receita') or "",
-            numero_referencia=dados.get('numero_referencia') or "",
-            cnpj_cpf=dados.get('cnpj_cpf') or "",
-        )
-        
-        self.boletos.append(boleto.to_dict())
-        self._save_data()
-        
-        # Lista de tipos que são impostos/guias
-        tipos_impostos = [
-            'darf', 'irpf', 'irpj', 'pis', 'cofins', 'csll', 'gps', 
-            'das', 'das_mei', 'itr', 'fgts', 'fgts_digital',
-            'ipva', 'icms', 'icms_st', 'icms_difal', 'itcmd', 
-            'licenciamento', 'multa_transito',
-            'iptu', 'iss', 'itbi', 'guia'
-        ]
-        
-        # Monta resposta baseada no tipo
-        if boleto.tipo in tipos_impostos:
-            resposta = self._formatar_resposta_imposto(boleto)
-        else:
-            resposta = self._formatar_resposta_boleto(boleto)
-        
-        # Indica se usou IA
-        if dados_ia:
-            resposta = "🤖 *Extraído com IA (Gemini Vision)*\n" + resposta
-        
-        # Agenda automaticamente se tiver data de vencimento
-        if boleto.vencimento and self.agenda_module:
-            try:
-                await self._agendar_boleto(boleto, user_id)
-                resposta += f"""
-✅ *Agendado automaticamente!*
-Você receberá um lembrete antes do vencimento.
-"""
+        return await self._processar_dados_boleto(dados, arquivo, user_id)
                 # Atualiza status
                 for b in self.boletos:
                     if b['id'] == boleto.id:
@@ -370,29 +372,8 @@ Você receberá um lembrete antes do vencimento.
         return None
     
     def _get_prompt_extracao(self) -> str:
-        """Retorna o prompt para extração de dados"""
-        return """Analise este documento (boleto, fatura, guia de imposto) e extraia as informações em formato JSON.
-
-Retorne APENAS um JSON válido (sem markdown, sem ```json) com os seguintes campos:
-{
-    "tipo": "boleto" ou "darf" ou "gps" ou "das" ou "iptu" ou "ipva" ou "fgts" ou "conta_luz" ou "conta_agua" ou "conta_telefone" ou "condominio" ou "aluguel" ou "guia" ou "outro",
-    "valor": número decimal (apenas o número, ex: 150.00),
-    "linha_digitavel": "linha digitável completa com todos os números (47-48 dígitos)",
-    "codigo_barras": "código de barras se visível (44 dígitos)",
-    "vencimento": "data de vencimento no formato DD/MM/YYYY",
-    "beneficiario": "nome do credor/empresa que vai receber o pagamento",
-    "pagador": "nome de quem deve pagar",
-    "descricao": "descrição do que está sendo cobrado",
-    "cnpj_cpf": "CNPJ ou CPF do beneficiário se visível",
-    "periodo_apuracao": "período de referência/competência se for imposto",
-    "codigo_receita": "código da receita se for DARF ou guia de imposto"
-}
-
-IMPORTANTE:
-- Extraia a linha digitável COMPLETA (todos os números, sem espaços)
-- O valor deve ser apenas números com ponto decimal (ex: 1234.56)
-- Se algum campo não estiver visível, use null
-- Retorne APENAS o JSON, sem explicações"""
+        """Retorna o prompt para extração de dados com sinônimos"""
+        return criar_prompt_extracao_melhorado()
 
     def _parse_resposta_gemini(self, resposta: str) -> Optional[Dict]:
         """Parse da resposta do Gemini para dicionário"""
@@ -428,6 +409,78 @@ IMPORTANTE:
             print(f"[GEMINI] Erro ao fazer parse do JSON: {e}")
             print(f"[GEMINI] Resposta: {resposta[:500]}")
             return None
+    
+    async def _processar_dados_boleto(self, dados: Dict, arquivo: str, user_id: str) -> str:
+        """
+        Processa dados extraídos de um boleto/documento
+        Salva no banco de dados e agenda se necessário
+        """
+        from uuid import uuid4
+        
+        # Salva o boleto/imposto
+        boleto = Boleto(
+            id=str(uuid4())[:8],
+            valor=dados.get('valor') or 0,
+            codigo_barras=dados.get('codigo_barras') or "",
+            linha_digitavel=dados.get('linha_digitavel') or "",
+            vencimento=dados.get('vencimento') or "",
+            beneficiario=dados.get('beneficiario') or "Não identificado",
+            pagador=dados.get('pagador') or "Não identificado",
+            descricao=dados.get('descricao') or "Boleto",
+            arquivo_origem=os.path.basename(arquivo),
+            user_id=user_id,
+            extraido_em=datetime.now().isoformat(),
+            pago=False,
+            agendado=False,
+            tipo=dados.get('tipo', 'boleto'),
+            periodo_apuracao=dados.get('periodo_apuracao') or "",
+            codigo_receita=dados.get('codigo_receita') or "",
+            numero_referencia=dados.get('numero_referencia') or "",
+            cnpj_cpf=dados.get('cnpj_cpf') or "",
+        )
+        
+        self.boletos.append(boleto.to_dict())
+        self._save_data()
+        
+        # Lista de tipos que são impostos/guias
+        tipos_impostos = [
+            'darf', 'irpf', 'irpj', 'pis', 'cofins', 'csll', 'gps', 
+            'das', 'das_mei', 'itr', 'fgts', 'fgts_digital',
+            'ipva', 'icms', 'icms_st', 'icms_difal', 'itcmd', 
+            'licenciamento', 'multa_transito',
+            'iptu', 'iss', 'itbi', 'guia'
+        ]
+        
+        # Monta resposta baseada no tipo
+        if boleto.tipo in tipos_impostos:
+            resposta = self._formatar_resposta_imposto(boleto)
+        else:
+            resposta = self._formatar_resposta_boleto(boleto)
+        
+        # Agenda automaticamente se tiver data de vencimento
+        if boleto.vencimento and self.agenda_module:
+            try:
+                await self._agendar_boleto(boleto, user_id)
+                resposta += f"""
+✅ *Agendado automaticamente!*
+Você receberá um lembrete antes do vencimento.
+"""
+                # Atualiza status
+                for b in self.boletos:
+                    if b['id'] == boleto.id:
+                        b['agendado'] = True
+                self._save_data()
+            except Exception as e:
+                resposta += f"\n⚠️ Não consegui agendar: {e}"
+        
+        resposta += f"""
+─────────────────────
+*Comandos:*
+/boletos - Ver todos os boletos
+/pago {boleto.id} - Marcar como pago
+"""
+        
+        return resposta
     
     def _formatar_resposta_boleto(self, boleto: Boleto) -> str:
         """Formata resposta para boleto comum"""
