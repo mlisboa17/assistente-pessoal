@@ -1,7 +1,7 @@
 ﻿"""
 Modulo de Agenda
 Gerencia compromissos, lembretes e calendario
-Integracao com Google Calendar
+Integracao com Google Calendar e Gemini
 """
 import json
 import os
@@ -12,7 +12,7 @@ from dataclasses import dataclass, asdict
 from uuid import uuid4
 
 try:
-    from modules.google_auth import get_google_auth, GoogleAuthManager
+    from modules.gemini_auth import get_gemini_auth, GeminiAuthManager
     GOOGLE_AUTH_AVAILABLE = True
 except ImportError:
     GOOGLE_AUTH_AVAILABLE = False
@@ -58,7 +58,7 @@ class AgendaModule:
         self._load_data()
         self.google_auth = None
         if GOOGLE_AUTH_AVAILABLE:
-            self.google_auth = get_google_auth(data_dir)
+            self.google_auth = get_gemini_auth(data_dir)
     
     def _load_data(self):
         if os.path.exists(self.eventos_file):
