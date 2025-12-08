@@ -8,7 +8,7 @@ import re
 import json
 import base64
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
 
 # Sinônimos para extração melhorada
@@ -17,6 +17,17 @@ from modules.sinonimos_documentos import (
     identificar_tipo_documento,
     extrair_com_sinonimos
 )
+
+# Confirmação e edição de documentos
+try:
+    from modules.confirmacao_documentos import (
+        ConfirmacaoDocumentos,
+        DocumentoExtraido,
+        get_confirmacao_documentos
+    )
+    CONFIRMACAO_AVAILABLE = True
+except ImportError:
+    CONFIRMACAO_AVAILABLE = False
 
 # Extractores brasileiros e OCR
 try:
@@ -114,6 +125,12 @@ class FaturasModule:
         self.agenda_module = None
         # 🆕 Referência ao módulo de finanças (será injetado)
         self.financas_module = None
+        
+        # 🆕 Sistema de confirmação de documentos
+        if CONFIRMACAO_AVAILABLE:
+            self.confirmacao = get_confirmacao_documentos()
+        else:
+            self.confirmacao = None
     
     def set_agenda_module(self, agenda):
         """Define o módulo de agenda para criar lembretes"""
@@ -413,74 +430,273 @@ Texto extraído (primeiros 500 caracteres):
     async def _processar_dados_boleto(self, dados: Dict, arquivo: str, user_id: str) -> str:
         """
         Processa dados extraídos de um boleto/documento
-        Salva no banco de dados e agenda se necessário
+        Mostra para confirmação do usuário antes de salvar
         """
         from uuid import uuid4
         
-        # Salva o boleto/imposto
-        boleto = Boleto(
+        # Cria documento extraído
+        doc_extraido = DocumentoExtraido(
             id=str(uuid4())[:8],
+            tipo=dados.get('tipo', 'boleto'),
             valor=dados.get('valor') or 0,
-            codigo_barras=dados.get('codigo_barras') or "",
-            linha_digitavel=dados.get('linha_digitavel') or "",
-            vencimento=dados.get('vencimento') or "",
             beneficiario=dados.get('beneficiario') or "Não identificado",
             pagador=dados.get('pagador') or "Não identificado",
-            descricao=dados.get('descricao') or "Boleto",
-            arquivo_origem=os.path.basename(arquivo),
+            data=dados.get('vencimento') or datetime.now().strftime('%Y-%m-%d'),
+            descricao=dados.get('descricao') or f"{dados.get('tipo', 'boleto').upper()} - {dados.get('beneficiario', 'N/A')}",
             user_id=user_id,
+            dados_extras={
+                'linha_digitavel': dados.get('linha_digitavel', ''),
+                'codigo_barras': dados.get('codigo_barras', ''),
+                'banco': dados.get('banco', ''),
+                'vencimento': dados.get('vencimento', ''),
+                'periodo_apuracao': dados.get('periodo_apuracao', ''),
+                'codigo_receita': dados.get('codigo_receita', ''),
+                'cnpj_cpf': dados.get('cnpj_cpf', ''),
+                'arquivo_origem': os.path.basename(arquivo),
+            }
+        )
+        
+        # Armazena no sistema de confirmação
+        if self.confirmacao:
+            self.confirmacao.pendentes[user_id] = doc_extraido
+        
+        # Formata e mostra para confirmação
+        resposta = self.confirmacao.formatar_exibicao(doc_extraido) if self.confirmacao else ""
+        
+        return resposta
+    
+    async def processar_confirmacao(self, mensagem: str, user_id: str) -> Tuple[str, Optional[Dict]]:
+        """
+        Processa resposta do usuário sobre confirmação de documento
+        
+        Retorna: (mensagem, dados_acao)
+        """
+        if not self.confirmacao:
+            return "❌ Sistema de confirmação não disponível", None
+        
+        resposta_msg, dados_acao = self.confirmacao.processar_resposta(mensagem, user_id)
+        
+        # Se o usuário confirmou e selecionou opções, processa
+        if dados_acao and dados_acao.get('acao') == 'processar':
+            doc = dados_acao.get('documento')
+            opcoes = dados_acao.get('opcoes', [])
+            
+            # Processa as opções selecionadas
+            resultados = await self._executar_opcoes(doc, opcoes)
+            
+            resposta_final = self.confirmacao.gerar_resposta_conclusao({
+                'agenda': resultados.get('agenda'),
+                'despesa': resultados.get('despesa'),
+                'pago': resultados.get('pago'),
+                'valor': doc.valor,
+                'descricao': doc.descricao,
+                'tipo': doc.tipo,
+            })
+            
+            # Limpa documento processado
+            if user_id in self.confirmacao.pendentes:
+                del self.confirmacao.pendentes[user_id]
+            
+            return resposta_final, {
+                'acao': 'processado',
+                'resultado': resultados
+            }
+        
+        return resposta_msg, dados_acao
+    
+    async def _executar_opcoes(self, doc: DocumentoExtraido, opcoes: List[str]) -> Dict[str, Any]:
+        """Executa as 3 rotinas selecionadas: agenda, despesa, pago"""
+        resultados = {
+            'agenda': None,
+            'despesa': None,
+            'pago': None
+        }
+        
+        # 📅 OPÇÃO 1: AGENDAR
+        if 'agenda' in opcoes:
+            try:
+                resultados['agenda'] = await self._agendar_documento(doc)
+            except Exception as e:
+                print(f"[AGENDA] Erro: {e}")
+                resultados['agenda'] = {'erro': str(e)}
+        
+        # 💰 OPÇÃO 2: REGISTRAR DESPESA
+        if 'despesa' in opcoes:
+            try:
+                resultados['despesa'] = await self._registrar_despesa(doc)
+            except Exception as e:
+                print(f"[DESPESA] Erro: {e}")
+                resultados['despesa'] = {'erro': str(e)}
+        
+        # ✅ OPÇÃO 3: MARCAR COMO PAGO
+        if 'pago' in opcoes:
+            try:
+                resultados['pago'] = await self._marcar_pago(doc)
+            except Exception as e:
+                print(f"[PAGO] Erro: {e}")
+                resultados['pago'] = {'erro': str(e)}
+        
+        # 💾 SALVA O BOLETO PERMANENTEMENTE
+        await self._salvar_boleto_permanente(doc)
+        
+        return resultados
+    
+    async def _agendar_documento(self, doc: DocumentoExtraido) -> Dict[str, Any]:
+        """Agenda lembrete para pagar o documento"""
+        if not self.agenda_module:
+            return {'erro': 'Módulo de agenda não disponível'}
+        
+        try:
+            # Prepara dados para agenda
+            data_venc = doc.data
+            descricao = f"💰 Pagar: {doc.descricao}"
+            
+            # Usa o módulo de agenda para criar lembrete
+            resultado = await self.agenda_module.handle(
+                'criar',
+                [data_venc, descricao],
+                doc.user_id
+            )
+            
+            return {
+                'id': doc.id,
+                'data': data_venc,
+                'descricao': descricao,
+                'status': 'agendado'
+            }
+        except Exception as e:
+            print(f"[AGENDAR] Erro: {e}")
+            return {'erro': str(e)}
+    
+    async def _registrar_despesa(self, doc: DocumentoExtraido) -> Dict[str, Any]:
+        """Registra o documento como despesa no módulo de finanças"""
+        if not self.financas_module:
+            return {'erro': 'Módulo de finanças não disponível'}
+        
+        try:
+            # Mapeia tipos para categorias de finanças
+            mapa_categorias = {
+                'boleto': 'outros',
+                'transferencia': 'outros',
+                'pix': 'outros',
+                'darf': 'impostos',
+                'das': 'impostos',
+                'gps': 'impostos',
+                'fgts': 'impostos',
+                'condominio': 'moradia',
+                'aluguel': 'moradia',
+                'luz': 'moradia',
+                'agua': 'moradia',
+                'gas': 'moradia',
+                'telefone': 'utilidades',
+                'internet': 'utilidades',
+            }
+            
+            categoria = mapa_categorias.get(doc.tipo, 'outros')
+            
+            # Registra como despesa
+            transacao_id = self.financas_module.registrar_transacao(
+                tipo='saida',
+                valor=doc.valor,
+                descricao=doc.descricao,
+                categoria=categoria,
+                data=doc.data,
+                user_id=doc.user_id,
+                origem=f'documento_{doc.id}'
+            )
+            
+            return {
+                'id': transacao_id,
+                'categoria': categoria,
+                'valor': doc.valor,
+                'status': 'registrado'
+            }
+        except Exception as e:
+            print(f"[REGISTRAR_DESPESA] Erro: {e}")
+            return {'erro': str(e)}
+    
+    async def _marcar_pago(self, doc: DocumentoExtraido) -> Dict[str, Any]:
+        """Marca o documento como já pago"""
+        try:
+            # Cria boleto permanente com status pago
+            boleto = Boleto(
+                id=doc.id,
+                valor=doc.valor,
+                codigo_barras=doc.dados_extras.get('codigo_barras', ''),
+                linha_digitavel=doc.dados_extras.get('linha_digitavel', ''),
+                vencimento=doc.data,
+                beneficiario=doc.beneficiario,
+                pagador=doc.pagador,
+                descricao=doc.descricao,
+                arquivo_origem=doc.dados_extras.get('arquivo_origem', ''),
+                user_id=doc.user_id,
+                extraido_em=datetime.now().isoformat(),
+                pago=True,  # ✅ Marcado como PAGO
+                agendado=False,
+                tipo=doc.tipo,
+                periodo_apuracao=doc.dados_extras.get('periodo_apuracao', ''),
+                codigo_receita=doc.dados_extras.get('codigo_receita', ''),
+                numero_referencia=doc.dados_extras.get('numero_referencia', ''),
+                cnpj_cpf=doc.dados_extras.get('cnpj_cpf', ''),
+            )
+            
+            # Procura e atualiza se já existe
+            encontrado = False
+            for i, b in enumerate(self.boletos):
+                if b['id'] == doc.id:
+                    self.boletos[i] = boleto.to_dict()
+                    encontrado = True
+                    break
+            
+            if not encontrado:
+                self.boletos.append(boleto.to_dict())
+            
+            self._save_data()
+            
+            return {
+                'id': doc.id,
+                'status': 'pago',
+                'data_pagamento': datetime.now().strftime('%d/%m/%Y')
+            }
+        except Exception as e:
+            print(f"[MARCAR_PAGO] Erro: {e}")
+            return {'erro': str(e)}
+    
+    async def _salvar_boleto_permanente(self, doc: DocumentoExtraido):
+        """Salva o boleto/documento de forma permanente"""
+        boleto = Boleto(
+            id=doc.id,
+            valor=doc.valor,
+            codigo_barras=doc.dados_extras.get('codigo_barras', ''),
+            linha_digitavel=doc.dados_extras.get('linha_digitavel', ''),
+            vencimento=doc.data,
+            beneficiario=doc.beneficiario,
+            pagador=doc.pagador,
+            descricao=doc.descricao,
+            arquivo_origem=doc.dados_extras.get('arquivo_origem', ''),
+            user_id=doc.user_id,
             extraido_em=datetime.now().isoformat(),
             pago=False,
             agendado=False,
-            tipo=dados.get('tipo', 'boleto'),
-            periodo_apuracao=dados.get('periodo_apuracao') or "",
-            codigo_receita=dados.get('codigo_receita') or "",
-            numero_referencia=dados.get('numero_referencia') or "",
-            cnpj_cpf=dados.get('cnpj_cpf') or "",
+            tipo=doc.tipo,
+            periodo_apuracao=doc.dados_extras.get('periodo_apuracao', ''),
+            codigo_receita=doc.dados_extras.get('codigo_receita', ''),
+            numero_referencia=doc.dados_extras.get('numero_referencia', ''),
+            cnpj_cpf=doc.dados_extras.get('cnpj_cpf', ''),
         )
         
-        self.boletos.append(boleto.to_dict())
+        # Procura se já existe
+        encontrado = False
+        for i, b in enumerate(self.boletos):
+            if b['id'] == doc.id:
+                self.boletos[i] = boleto.to_dict()
+                encontrado = True
+                break
+        
+        if not encontrado:
+            self.boletos.append(boleto.to_dict())
+        
         self._save_data()
-        
-        # Lista de tipos que são impostos/guias
-        tipos_impostos = [
-            'darf', 'irpf', 'irpj', 'pis', 'cofins', 'csll', 'gps', 
-            'das', 'das_mei', 'itr', 'fgts', 'fgts_digital',
-            'ipva', 'icms', 'icms_st', 'icms_difal', 'itcmd', 
-            'licenciamento', 'multa_transito',
-            'iptu', 'iss', 'itbi', 'guia'
-        ]
-        
-        # Monta resposta baseada no tipo
-        if boleto.tipo in tipos_impostos:
-            resposta = self._formatar_resposta_imposto(boleto)
-        else:
-            resposta = self._formatar_resposta_boleto(boleto)
-        
-        # Agenda automaticamente se tiver data de vencimento
-        if boleto.vencimento and self.agenda_module:
-            try:
-                await self._agendar_boleto(boleto, user_id)
-                resposta += f"""
-✅ *Agendado automaticamente!*
-Você receberá um lembrete antes do vencimento.
-"""
-                # Atualiza status
-                for b in self.boletos:
-                    if b['id'] == boleto.id:
-                        b['agendado'] = True
-                self._save_data()
-            except Exception as e:
-                resposta += f"\n⚠️ Não consegui agendar: {e}"
-        
-        resposta += f"""
-─────────────────────
-*Comandos:*
-/boletos - Ver todos os boletos
-/pago {boleto.id} - Marcar como pago
-"""
-        
-        return resposta
     
     def _formatar_resposta_boleto(self, boleto: Boleto) -> str:
         """Formata resposta para boleto comum"""

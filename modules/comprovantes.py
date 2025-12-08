@@ -160,6 +160,16 @@ class ComprovantesModule:
         except ImportError as e:
             print(f"⚠️ Extrator brasileiro não disponível: {e}")
         
+        # 🆕 Sistema de confirmação de documentos
+        try:
+            from modules.confirmacao_documentos import get_confirmacao_documentos
+            self.confirmacao = get_confirmacao_documentos()
+        except ImportError:
+            self.confirmacao = None
+        
+        # Módulos relacionados
+        self.financas_module = None
+        
         os.makedirs(data_dir, exist_ok=True)
         self._load_data()
     
