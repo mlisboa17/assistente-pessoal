@@ -5,6 +5,8 @@ Com suporte a:
 - Leitura em tempo real com progresso
 - Resumo automático enquanto lê
 - Interface interativa durante processamento
+- 🆕 Busca fuzzy por remetente incompleto
+- 🆕 Busca inteligente por assunto com interpretação natural
 """
 import os
 import json
@@ -14,6 +16,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Any, Dict, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
+from modules.buscador_emails import BuscadorFuzzyEmails
 
 
 @dataclass
@@ -74,6 +77,9 @@ class EmailModule:
         
         # 🆕 Configurações de filtro por usuário
         self.filtros_usuario: Dict[str, Dict] = {}
+        
+        # 🆕 Buscador fuzzy de e-mails
+        self.buscador = BuscadorFuzzyEmails()
     
     def set_google_auth(self, auth_module):
         """Define o módulo de autenticação Google"""
@@ -108,9 +114,20 @@ Consulte a documentação para mais detalhes.
         elif command in ['importante', 'trabalho', 'pessoal', 'notificacoes', 'promotional']:
             return await self._aplicar_filtro(user_id, command)
         
-        # 🆕 Comando de remetente
+        # 🆕 Comando de remetente (fuzzy search)
         elif command.startswith('de:'):
             return await self._aplicar_filtro(user_id, command)
+        
+        # 🆕 Busca por assunto (fuzzy search)
+        elif command.startswith('assunto:'):
+            assunto = command[8:].strip()
+            return await self._buscar_email(user_id, assunto)
+        
+        # 🆕 Busca inteligente (sem prefixo)
+        elif command in ['buscar', 'search', 'procurar']:
+            if args:
+                return await self._buscar_email(user_id, ' '.join(args))
+            return await self._listar_emails_stream(user_id)
         
         elif command == 'email':
             if args:
@@ -143,14 +160,23 @@ Consulte a documentação para mais detalhes.
 📂 Categoria:
 /importante /trabalho /pessoal /notificacoes
 
-🔍 Remetente:
-/de:email@dominio.com
+🔍 Busca Inteligente (fuzzy matching):
+/buscar chefe - Busca por remetente incompleto
+/de:ch - Procura por "ch*" em remetentes
+/assunto:reunião - Busca inteligente por assunto
+/email maria - Busca combinada
 
 🔧 Controle:
 /emails - Menu inicial
 /procurar_tudo - Procurar em todas as pastas
 /parar - Parar leitura
 /reset - Resetar filtros
+
+💡 *Exemplos:*
+/buscar chefe - Encontra "chefe@empresa.com"
+/de:ama - Encontra "amazon@noreply.com"
+/assunto:reunião urgente - Busca inteligente
+/email carlos - Busca por remetente "carlos"
 """
     
     async def handle_natural(self, message: str, analysis: Any,
@@ -1058,17 +1084,137 @@ Mas nenhum corresponde aos filtros:
         return resposta
     
     async def _buscar_email(self, user_id: str, termo: str) -> str:
-        """Busca e-mails por termo com indicador de progresso"""
+        """
+        🆕 Busca inteligente de e-mails com fuzzy matching
         
-        return f"""
-🔍 *Buscando:* "{termo}"
+        Suporta:
+        1. Busca por remetente incompleto: "ch" → "chefe@empresa.com"
+        2. Busca por assunto: "reunião" → encontra e-mails sobre reuniões
+        3. Busca combinada: "chefe reunião" → do chefe sobre reunião
+        4. Autocorrection: "ama" → "amigo@hotmail.com" (fuzzy match)
+        """
+        
+        try:
+            # Primeiro, obter todos os e-mails disponíveis
+            emails_disponiveis = await self._buscar_emails_inbox(user_id)
+            if not emails_disponiveis:
+                emails_disponiveis = await self._buscar_emails_todas_pastas(user_id)
+            
+            # Analisar o termo de busca
+            termo_lower = termo.lower().strip()
+            
+            # 🔍 Detectar tipo de busca
+            if termo_lower.startswith('de:'):
+                # Busca por remetente: "de:chefe"
+                remetente = termo_lower[3:].strip()
+                resultados = self.buscador.buscar_remetente_fuzzy(
+                    remetente, emails_disponiveis, limiar_confianca=0.5
+                )
+                tipo_busca = 'remetente'
+            
+            elif termo_lower.startswith('assunto:'):
+                # Busca por assunto: "assunto:reunião"
+                assunto = termo_lower[8:].strip()
+                resultados = self.buscador.buscar_assunto_inteligente(
+                    assunto, emails_disponiveis, limiar_confianca=0.5
+                )
+                tipo_busca = 'assunto'
+            
+            else:
+                # Busca inteligente (detectar automaticamente)
+                # Tentar primeiro como remetente
+                resultados_remetente = self.buscador.buscar_remetente_fuzzy(
+                    termo, emails_disponiveis, limiar_confianca=0.6
+                )
+                
+                # Tentar como assunto
+                resultados_assunto = self.buscador.buscar_assunto_inteligente(
+                    termo, emails_disponiveis, limiar_confianca=0.5
+                )
+                
+                # Combinar resultados (remetente tem prioridade se houver match >= 0.8)
+                if resultados_remetente and resultados_remetente[0].score >= 0.8:
+                    resultados = resultados_remetente
+                    tipo_busca = 'remetente'
+                elif resultados_assunto:
+                    resultados = resultados_assunto
+                    tipo_busca = 'assunto'
+                else:
+                    resultados = resultados_remetente or resultados_assunto
+                    tipo_busca = 'combinado'
+            
+            # 📋 Montar resposta
+            if not resultados:
+                return f"""
+🔍 *Busca: "{termo}"*
 
-🔄 Procurando por: {termo}...
+❌ Nenhum e-mail encontrado com esses critérios.
 
-💡 Dica: Você pode usar filtros como:
-• /importante - Apenas e-mails importantes
-• /de:chefe@empresa.com - De um remetente específico
-• /assunto:reunião - Com palavra específica no assunto
+💡 *Tente:*
+/de:chefe - Buscar por remetente específico
+/assunto:reunião - Buscar por assunto
+/10emails - Ver últimos 10 e-mails
+/importante - Ver apenas importantes
 
-Ou continue assistindo a leitura completa com /emails
+📝 *Exemplos de buscas:*
+"ch" - Busca fuzzy por "chefe"
+"ama" - Encontra "amazon@noreply.com"
+"reunião" - E-mails sobre reunião
+"urgente hoje" - E-mails urgentes de hoje
+"""
+            
+            # Formatar resposta com resultados
+            resposta = f"""
+🔍 *Resultados da Busca: "{termo}"*
+📊 Encontrados: {len(resultados)} e-mail(is)
+🎯 Tipo: {tipo_busca}
+
+─────────────────────────────────
+"""
+            
+            # Mostrar os resultados (máximo 5)
+            for i, resultado in enumerate(resultados[:5], 1):
+                stars = "⭐" * int(resultado.score * 5)
+                resposta += f"""
+{i}. {stars} ({resultado.score:.0%})
+   📧 De: {resultado.email.de}
+   📌 Assunto: {resultado.email.assunto[:55]}
+   💬 Motivo: {resultado.motivo[:60]}
+"""
+            
+            if len(resultados) > 5:
+                resposta += f"\n... e mais {len(resultados) - 5} e-mail(is)"
+            
+            resposta += """
+
+─────────────────────────────────
+💡 *Sugestões de Autocomplete:*
+"""
+            
+            # Gerar sugestões de autocomplete
+            sugestoes = self.buscador.gerar_sugestoes(termo, emails_disponiveis)
+            if sugestoes:
+                for remetente, nome_amigavel in sugestoes[:3]:
+                    resposta += f"🔹 {nome_amigavel} ({remetente})\n"
+            
+            resposta += """
+
+🎯 *Próximos Passos:*
+/emails - Voltar ao menu
+/mais - Ver mais resultados
+/reset - Resetar busca
+"""
+            
+            return resposta
+        
+        except Exception as e:
+            print(f"❌ Erro na busca: {e}")
+            return f"""
+❌ *Erro na Busca*
+
+Erro: {str(e)}
+
+💡 Tente:
+/emails - Voltar ao menu
+/reset - Resetar filtros
 """
