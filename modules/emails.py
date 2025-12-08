@@ -71,6 +71,9 @@ class EmailModule:
         
         # Rastreador de progresso
         self.progresso_leitura: Dict[str, Dict] = {}
+        
+        # 🆕 Configurações de filtro por usuário
+        self.filtros_usuario: Dict[str, Dict] = {}
     
     def set_google_auth(self, auth_module):
         """Define o módulo de autenticação Google"""
@@ -94,8 +97,20 @@ Consulte a documentação para mais detalhes.
 """
         
         if command == 'emails':
-            # 🆕 Retorna status + botões interativos
+            # 🆕 Retorna menu inicial com opções de filtro
             return await self._listar_emails_stream(user_id)
+        
+        # 🆕 Comandos de quantidade
+        elif command in ['5emails', '10emails', '20emails', 'todos']:
+            return await self._aplicar_filtro(user_id, command)
+        
+        # 🆕 Comandos de categoria
+        elif command in ['importante', 'trabalho', 'pessoal', 'notificacoes', 'promotional']:
+            return await self._aplicar_filtro(user_id, command)
+        
+        # 🆕 Comando de remetente
+        elif command.startswith('de:'):
+            return await self._aplicar_filtro(user_id, command)
         
         elif command == 'email':
             if args:
@@ -109,7 +124,29 @@ Consulte a documentação para mais detalhes.
             # 🆕 Permite interrupção da leitura
             return await self._parar_leitura(user_id)
         
-        return "📧 Comandos: /emails, /email [busca], /inbox, /parar"
+        elif command == 'reset':
+            # 🆕 Reseta filtros e mostra menu novamente
+            if user_id in self.filtros_usuario:
+                del self.filtros_usuario[user_id]
+            return await self._listar_emails_stream(user_id)
+        
+        return """
+📧 *Comandos de E-mail:*
+
+🎯 Quantidade:
+/5emails /10emails /20emails /todos
+
+📂 Categoria:
+/importante /trabalho /pessoal /notificacoes
+
+🔍 Remetente:
+/de:email@dominio.com
+
+🔧 Controle:
+/emails - Menu inicial
+/parar - Parar leitura
+/reset - Resetar filtros
+"""
     
     async def handle_natural(self, message: str, analysis: Any,
                               user_id: str, attachments: list = None) -> str:
@@ -118,18 +155,12 @@ Consulte a documentação para mais detalhes.
     
     async def _listar_emails_stream(self, user_id: str) -> str:
         """
-        Lista e-mails com progresso em tempo real
-        Retorna interface interativa com indicador de leitura
+        Lista e-mails com opções de filtro
+        Pergunta ao usuário:
+        - Quantos e-mails verificar?
+        - Qual categoria?
+        - De qual remetente?
         """
-        
-        # 🆕 Inicializa rastreador de progresso
-        self.progresso_leitura[user_id] = {
-            'total': 0,
-            'processados': 0,
-            'parado': False,
-            'emails': [],
-            'inicio': datetime.now()
-        }
         
         try:
             # Verifica se há autenticação Google
@@ -149,17 +180,97 @@ Depois você pode:
 ✅ Interagir enquanto lê (/parar, /mais, etc)
 """
             
-            # 🆕 Inicia leitura assíncrona
+            # 🆕 PERGUNTA INICIAL: Quantos e-mails verificar?
+            if user_id not in self.filtros_usuario:
+                return self._gerar_menu_inicial(user_id)
+            
+            # Se já tem filtros definidos, processa
             return await self._processar_emails_progressivo(user_id)
             
         except Exception as e:
             print(f"❌ Erro ao listar e-mails: {e}")
             return f"❌ Erro ao acessar e-mails: {str(e)}"
     
+    def _gerar_menu_inicial(self, user_id: str) -> str:
+        """
+        Gera menu inicial com opções de filtro
+        Pergunta quantos e-mails e de qual categoria
+        """
+        return """
+📧 *Configuração de Leitura de E-mails*
+
+🎯 *Quantos e-mails você quer verificar?*
+
+/5emails    - Apenas 5 e-mails (rápido ⚡)
+/10emails   - 10 e-mails (padrão)
+/20emails   - 20 e-mails (completo)
+/todos      - Todos os e-mails
+
+─────────────────────────────────
+📂 *Ou filtrar por categoria:*
+
+🔴 /importante     - Apenas IMPORTANTES
+💼 /trabalho       - Apenas TRABALHO
+👤 /pessoal        - Apenas PESSOAL
+🔔 /notificacoes   - Apenas NOTIFICAÇÕES
+
+─────────────────────────────────
+🔍 *Ou buscar por remetente:*
+
+/de:email@empresa.com
+/de:amigo@gmail.com
+
+─────────────────────────────────
+💡 *Exemplos:*
+"/10emails" + depois "/importante"
+"/de:chefe@empresa.com"
+"/trabalho" para ver só e-mails de trabalho
+"""
+    
+    async def _aplicar_filtro(self, user_id: str, comando: str) -> str:
+        """
+        Aplica filtro do usuário e inicia leitura
+        """
+        self.filtros_usuario[user_id] = {
+            'quantidade': 10,
+            'categoria': None,
+            'remetente': None,
+            'aplicado_em': datetime.now()
+        }
+        
+        # Parseia comando
+        if 'emails' in comando:
+            # /5emails, /10emails, /20emails
+            num = ''.join(filter(str.isdigit, comando))
+            if num:
+                self.filtros_usuario[user_id]['quantidade'] = int(num)
+        
+        elif comando.startswith('de:'):
+            # /de:email@example.com
+            email_remetente = comando[3:].strip()
+            self.filtros_usuario[user_id]['remetente'] = email_remetente
+        
+        else:
+            # /importante, /trabalho, /pessoal, etc
+            self.filtros_usuario[user_id]['categoria'] = comando.lstrip('/')
+        
+        # 🆕 Inicializa rastreador de progresso
+        self.progresso_leitura[user_id] = {
+            'total': 0,
+            'processados': 0,
+            'parado': False,
+            'emails': [],
+            'filtros': self.filtros_usuario[user_id],
+            'inicio': datetime.now()
+        }
+        
+        # Processa com os filtros
+        return await self._processar_emails_progressivo(user_id)
+    
     async def _processar_emails_progressivo(self, user_id: str) -> str:
         """
         Processa e-mails com progresso e resumo em tempo real
-        Interface mantém usuário informado e permite interação
+        Aplica filtros do usuário (quantidade, categoria, remetente)
         """
         
         try:
@@ -176,6 +287,24 @@ Quando receber novos e-mails, execute /emails
 e verei em tempo real para você.
 """
             
+            # 🆕 APLICAR FILTROS
+            filtros = self.filtros_usuario.get(user_id, {})
+            emails = self._aplicar_filtros_emails(emails, filtros)
+            
+            if not emails:
+                return f"""
+📧 *Nenhum e-mail encontrado*
+
+Com os filtros:
+• Quantidade: {filtros.get('quantidade', 10)}
+• Categoria: {filtros.get('categoria', 'Todas')}
+• Remetente: {filtros.get('remetente', 'Qualquer um')}
+
+💡 Tente:
+/reset - Resetar filtros
+/emails - Voltar ao menu
+"""
+            
             total = len(emails)
             self.progresso_leitura[user_id]['total'] = total
             
@@ -188,16 +317,50 @@ e verei em tempo real para você.
             print(f"❌ Erro no processamento: {e}")
             return f"❌ Erro ao processar e-mails: {str(e)}"
     
+    def _aplicar_filtros_emails(self, emails: List[Email], filtros: Dict) -> List[Email]:
+        """
+        Aplica filtros aos e-mails
+        - Quantidade máxima
+        - Categoria
+        - Remetente
+        """
+        emails_filtrados = emails.copy()
+        
+        # 🆕 Filtro por remetente
+        if filtros.get('remetente'):
+            remetente = filtros['remetente'].lower()
+            emails_filtrados = [
+                e for e in emails_filtrados 
+                if remetente in e.de.lower()
+            ]
+        
+        # 🆕 Filtro por categoria
+        if filtros.get('categoria'):
+            categoria = filtros['categoria'].lower()
+            emails_filtrados = [
+                e for e in emails_filtrados 
+                if e.categoria.lower() == categoria
+            ]
+        
+        # 🆕 Limitar quantidade
+        quantidade = filtros.get('quantidade', 10)
+        if isinstance(quantidade, int):
+            emails_filtrados = emails_filtrados[:quantidade]
+        
+        return emails_filtrados
+    
     def _montar_resposta_emails(self, user_id: str, emails: List[Email]) -> str:
         """
         Monta resposta com:
         - Indicador de progresso
+        - Filtros aplicados
         - Resumos dos e-mails
         - Botões interativos
         """
         
         total = len(emails)
         progresso = self.progresso_leitura[user_id]
+        filtros = self.filtros_usuario.get(user_id, {})
         
         # 🆕 Barra de progresso visual
         barra = self._gerar_barra_progresso(total, total)
@@ -206,8 +369,18 @@ e verei em tempo real para você.
 📧 *Leitura de E-mails* {barra}
 
 🔄 Total: {total} e-mail(is) para ler
-
 """
+        
+        # 🆕 Mostrar filtros aplicados
+        if filtros:
+            resposta += "\n🔍 *Filtros Aplicados:*\n"
+            if filtros.get('quantidade'):
+                resposta += f"  • Quantidade: {filtros['quantidade']}\n"
+            if filtros.get('categoria'):
+                resposta += f"  • Categoria: {filtros['categoria'].upper()}\n"
+            if filtros.get('remetente'):
+                resposta += f"  • Remetente: {filtros['remetente']}\n"
+            resposta += "\n"
         
         # Agrupar por categoria
         por_categoria = self._agrupar_por_categoria(emails)
@@ -231,7 +404,11 @@ e verei em tempo real para você.
 /importante - Filtrar importantes
 /trabalho - Filtrar trabalho
 /pessoal - Filtrar pessoal
+/5emails - Ver apenas 5
+/10emails - Ver 10
+/20emails - Ver 20
 /parar - Parar a leitura
+/reset - Resetar filtros
 
 📊 *Resumo por categoria:*
 """
