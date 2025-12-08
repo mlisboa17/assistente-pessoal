@@ -1106,9 +1106,9 @@ def iniciar_monitor_emails():
     def get_gmail_service(user_id: str):
         """Obtém serviço Gmail para um usuário"""
         try:
-            # Usa o módulo de agenda que tem o google_auth
-            from modules.google_auth import GoogleAuthManager
-            auth = GoogleAuthManager(data_dir="data")
+            # Usa o módulo de agenda que tem o gemini_auth
+            from modules.gemini_auth import GeminiAuthManager
+            auth = GeminiAuthManager(data_dir="data")
             return auth.get_gmail_service(user_id)
         except Exception as e:
             print(f"Erro ao obter Gmail service: {e}")
@@ -1152,8 +1152,8 @@ def iniciar_monitor_emails():
 def test_oauth(user_id, code):
     """Testa OAuth manualmente (útil para debug)"""
     try:
-        from modules.google_auth import GoogleAuthManager
-        auth_manager = GoogleAuthManager(data_dir="data")
+        from modules.gemini_auth import GeminiAuthManager
+        auth_manager = GeminiAuthManager(data_dir="data")
         
         print(f"\n[DEBUG-OAUTH] Testando OAuth para user: {user_id}")
         print(f"[DEBUG-OAUTH] Código: {code[:50]}...")
