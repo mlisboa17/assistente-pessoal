@@ -49,6 +49,21 @@ plotly>=5.15.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
 
+# OCR e Processamento de Imagem
+easyocr>=1.7.0              # OCR gratuito (português/inglês)
+pillow>=10.0.0              # Processamento de imagem
+pdf2image>=1.16.0           # Converte PDF para imagem
+pyzbar>=0.1.9               # Leitura de código de barras
+
+# Documentos Brasileiros
+validate-docbr>=1.10.0      # Validação CPF, CNPJ, CNH
+brazilcep>=7.0.0            # Consulta de CEP
+python-barcode>=0.15.0      # Geração de códigos de barras
+
+# Extratos e Documentos Financeiros
+ofxparse>=0.21              # Parser de arquivos OFX (extratos bancários)
+ofxtools>=0.9.5             # Ferramentas avançadas OFX
+
 # Utilitários
 python-dotenv>=1.0.0
 requests>=2.31.0
@@ -57,6 +72,10 @@ schedule>=1.2.0
 python-dateutil>=2.8.0
 pytz>=2023.3
 
+# API Server
+flask>=3.0.0
+
 # Logging e Monitoramento
 rich>=13.0.0
 loguru>=0.7.0
+

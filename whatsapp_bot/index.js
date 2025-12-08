@@ -1,7 +1,8 @@
 /**
- * 📱 Bot WhatsApp - Assistente Pessoal
+ * 🤖 Moga Bot - WhatsApp
+ * Assistente Pessoal Inteligente
  * Usa Baileys para conectar ao WhatsApp Web
- * Suporta: Texto, Áudio e Arquivos (PDF)
+ * Suporta: Texto, Áudio, PDF e Comprovantes
  */
 
 const makeWASocket = require('@whiskeysockets/baileys').default;
@@ -16,7 +17,7 @@ const path = require('path');
 const logger = pino({ level: 'silent' });
 
 // URL do servidor Python
-const PYTHON_SERVER = process.env.PYTHON_SERVER || 'http://localhost:8010';
+const PYTHON_SERVER = process.env.PYTHON_SERVER || 'http://localhost:8005';
 
 // Pasta para salvar sessão
 const AUTH_FOLDER = './auth_info';
@@ -67,7 +68,7 @@ async function connectToWhatsApp() {
         if (connection === 'open') {
             console.log('\n✅ Conectado ao WhatsApp!');
             console.log('🔐 Sessão autenticada e persistida em ./auth_info');
-            console.log('🤖 Bot está pronto para receber mensagens!\n');
+            console.log('🤖 Moga Bot está pronto para receber mensagens!\n');
             console.log('📝 Funcionalidades ativas:');
             console.log('   • Mensagens de texto');
             console.log('   • Áudios (transcrição automática)');
@@ -95,9 +96,8 @@ async function connectToWhatsApp() {
                 if (msg.message?.audioMessage) {
                     console.log(`🎤 ${pushName}: [ÁUDIO RECEBIDO]`);
                     await sock.sendMessage(from, { text: '🎤 Transcrevendo seu áudio...' });
-                    
                     const response = await processAudio(msg, from, pushName);
-                    await sock.sendMessage(from, { text: response });
+                    await sendWithButtons(sock, from, response);
                     console.log(`📤 Resposta enviada!`);
                     continue;
                 }
@@ -107,11 +107,9 @@ async function connectToWhatsApp() {
                     const filename = msg.message.documentMessage.fileName || 'arquivo';
                     const mimetype = msg.message.documentMessage.mimetype || '';
                     console.log(`📄 ${pushName}: [ARQUIVO: ${filename}]`);
-                    
                     await sock.sendMessage(from, { text: `📄 Processando arquivo: ${filename}...` });
-                    
                     const response = await processFile(msg, from, pushName);
-                    await sock.sendMessage(from, { text: response });
+                    await sendWithButtons(sock, from, response);
                     console.log(`📤 Resposta enviada!`);
                     continue;
                 }
@@ -120,12 +118,10 @@ async function connectToWhatsApp() {
                 if (msg.message?.imageMessage) {
                     const caption = msg.message.imageMessage.caption || '';
                     console.log(`🖼️ ${pushName}: [IMAGEM] ${caption}`);
-                    
                     await sock.sendMessage(from, { text: '🧾 Analisando comprovante...' });
-                    
                     // Processa como possível comprovante
                     const response = await processImage(msg, from, pushName);
-                    await sock.sendMessage(from, { text: response });
+                    await sendWithButtons(sock, from, response);
                     console.log(`📤 Resposta enviada!`);
                     continue;
                 }
@@ -140,18 +136,68 @@ async function connectToWhatsApp() {
 
                 if (!text) continue;
 
-                console.log(`📩 ${pushName}: ${text}`);
+                // Detecta se é grupo
+                const isGroup = from.endsWith('@g.us');
+                const groupName = isGroup ? (msg.key.participant ? await getGroupName(sock, from) : 'Grupo') : null;
+                // Para grupos, o participante é quem enviou a mensagem
+                const participantId = isGroup ? (msg.key.participant || from) : from;
+                
+                console.log(`📩 ${pushName}${isGroup ? ` [${groupName}]` : ''}: ${text}`);
 
-                const response = await processMessage(text, from, pushName);
-                await sock.sendMessage(from, { text: response });
+                const response = await processMessage(text, from, pushName, isGroup, groupName, participantId);
+                await sendWithButtons(sock, from, response);
                 console.log(`📤 Resposta enviada!`);
 
             } catch (error) {
                 console.error('❌ Erro ao processar:', error.message);
-                await sock.sendMessage(from, { 
-                    text: '❌ Desculpe, ocorreu um erro ao processar sua mensagem.' 
-                });
+                await sendWithButtons(sock, from, '❌ Desculpe, ocorreu um erro ao processar sua mensagem.');
             }
+        /**
+         * Envia mensagem com botões sempre que possível
+         */
+        async function sendWithButtons(sock, to, text) {
+            // Botões para comandos principais
+            const lower = text.toLowerCase();
+            if (lower.includes('comandos disponíveis') || lower.includes('olá! sou o moga bot') || lower.includes('não entendi') || lower.includes('use linguagem natural') || lower.includes('status do sistema')) {
+                await sock.sendMessage(to, {
+                    text: text,
+                    buttons: [
+                        {buttonId: '/ajuda', buttonText: {displayText: 'Ajuda'}, type: 1},
+                        {buttonId: '/tarefas', buttonText: {displayText: 'Tarefas'}, type: 1},
+                        {buttonId: '/gastos', buttonText: {displayText: 'Gastos'}, type: 1},
+                        {buttonId: '/agenda', buttonText: {displayText: 'Agenda'}, type: 1}
+                    ],
+                    headerType: 1
+                });
+                return;
+            }
+            // Botões de confirmação sim/não
+            if (lower.includes('tem certeza') || lower.includes('confirmar') || lower.includes('deseja continuar')) {
+                await sock.sendMessage(to, {
+                    text: text,
+                    buttons: [
+                        {buttonId: 'sim', buttonText: {displayText: 'Sim'}, type: 1},
+                        {buttonId: 'nao', buttonText: {displayText: 'Não'}, type: 1}
+                    ],
+                    headerType: 1
+                });
+                return;
+            }
+            // Botões para tarefas
+            if (lower.includes('tarefas') && lower.includes('id')) {
+                await sock.sendMessage(to, {
+                    text: text,
+                    buttons: [
+                        {buttonId: '/tarefa', buttonText: {displayText: 'Nova Tarefa'}, type: 1},
+                        {buttonId: '/concluir', buttonText: {displayText: 'Concluir Tarefa'}, type: 1}
+                    ],
+                    headerType: 1
+                });
+                return;
+            }
+            // Padrão: só texto
+            await sock.sendMessage(to, { text });
+        }
         }
     });
 
@@ -159,15 +205,32 @@ async function connectToWhatsApp() {
 }
 
 /**
+ * Obtém nome do grupo
+ */
+async function getGroupName(sock, groupId) {
+    try {
+        const metadata = await sock.groupMetadata(groupId);
+        return metadata.subject || 'Grupo';
+    } catch {
+        return 'Grupo';
+    }
+}
+
+/**
  * Processa mensagem de texto enviando para o servidor Python
  */
-async function processMessage(text, userId, userName) {
+async function processMessage(text, userId, userName, isGroup = false, groupName = null, participantId = null) {
     try {
-        const response = await axios.post(`${PYTHON_SERVER}/process`, {
+        const payload = {
             message: text,
             user_id: userId,
-            user_name: userName
-        }, {
+            user_name: userName,
+            is_group: isGroup,
+            group_name: groupName,
+            participant_id: participantId || userId
+        };
+        
+        const response = await axios.post(`${PYTHON_SERVER}/process`, payload, {
             timeout: 30000
         });
 
@@ -307,13 +370,16 @@ function processLocal(text) {
     const cmd = text.toLowerCase().trim();
 
     if (cmd === '/start' || cmd === 'oi' || cmd === 'olá' || cmd === 'ola') {
-        return `🤖 *Olá! Sou seu Assistente Pessoal!*
+        return `🤖 *Olá! Sou o Moga Bot!*
+
+Seu Assistente Pessoal Inteligente.
 
 Posso ajudar você com:
 📅 Agenda e lembretes
 💰 Controle de gastos
 ✅ Lista de tarefas
 📄 Processar boletos (PDF)
+🧾 Analisar comprovantes
 🎤 Comandos por áudio
 
 *Comandos disponíveis:*
@@ -322,7 +388,8 @@ Posso ajudar você com:
 /gastos - Ver resumo financeiro
 /agenda - Ver compromissos
 
-Ou simplesmente me diga o que precisa!
+💡 Use linguagem natural!
+Ex: "Me lembra de pagar a conta amanhã"
 🎤 Também aceito áudios!`;
     }
 
@@ -369,10 +436,11 @@ Ou digite /ajuda para ver os comandos básicos.`;
 // Banner inicial
 console.log(`
 ╔══════════════════════════════════════════════════╗
-║     📱 ASSISTENTE PESSOAL - WHATSAPP BOT        ║
+║     🤖 MOGA BOT - WHATSAPP                       ║
 ║                                                  ║
 ║  🎤 Áudio: Transcrição automática               ║
 ║  📄 PDF: Extração de boletos                    ║
+║  🧾 Comprovantes: Análise com IA                ║
 ║  💬 Texto: Linguagem natural                    ║
 ║                                                  ║
 ║  Servidor: ${PYTHON_SERVER.padEnd(30)}║

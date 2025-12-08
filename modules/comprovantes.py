@@ -127,6 +127,15 @@ class ComprovantesModule:
         self.comprovantes_file = os.path.join(data_dir, "comprovantes.json")
         self.pendentes_file = os.path.join(data_dir, "comprovantes_pendentes.json")
         
+        # Tenta carregar extrator brasileiro especializado
+        self._extrator_brasil = None
+        try:
+            from modules.extrator_brasil import ExtratorDocumentosBrasil
+            self._extrator_brasil = ExtratorDocumentosBrasil()
+            print("🇧🇷 Extrator de documentos brasileiros carregado!")
+        except ImportError as e:
+            print(f"⚠️ Extrator brasileiro não disponível: {e}")
+        
         os.makedirs(data_dir, exist_ok=True)
         self._load_data()
     
@@ -293,9 +302,175 @@ class ComprovantesModule:
         
         return comprovante.to_dict()
     
+    def processar_imagem_brasil(self, image_data: bytes, user_id: str) -> Dict[str, Any]:
+        """
+        Processa imagem usando extrator brasileiro especializado
+        Detecta automaticamente: Boleto, PIX, TED/DOC
+        """
+        if not self._extrator_brasil:
+            return {'erro': 'Extrator brasileiro não disponível'}
+        
+        resultado = self._extrator_brasil.extrair_automatico(image_data=image_data)
+        
+        tipo = resultado.get('tipo', 'desconhecido')
+        dados = resultado.get('dados', {})
+        
+        # Converte para formato padrão de comprovante
+        if tipo == 'boleto':
+            return self._converter_boleto(dados, user_id)
+        elif tipo == 'pix':
+            return self._converter_pix(dados, user_id)
+        elif tipo == 'transferencia':
+            return self._converter_transferencia(dados, user_id)
+        else:
+            # Usa processamento genérico
+            texto = resultado.get('texto_extraido', '')
+            return self.processar_texto_comprovante(texto, user_id)
+    
+    def _converter_boleto(self, dados: Dict, user_id: str) -> Dict[str, Any]:
+        """Converte dados de boleto para comprovante"""
+        comp_id = self._gerar_id(dados.get('linha_digitavel', ''))
+        
+        descricao = f"Boleto - {dados.get('beneficiario', 'Não identificado')}"
+        if dados.get('documento'):
+            descricao += f" (Doc: {dados['documento']})"
+        
+        comprovante = ComprovanteExtraido(
+            id=comp_id,
+            tipo='boleto',
+            valor=dados.get('valor', 0.0),
+            descricao=descricao,
+            data=dados.get('vencimento', datetime.now().strftime('%Y-%m-%d')),
+            destinatario=dados.get('beneficiario', ''),
+            categoria_sugerida='outros',
+            confianca=dados.get('confianca', 0.0) / 100,
+            texto_original=dados.get('linha_digitavel', ''),
+            user_id=user_id,
+            status='pendente',
+            criado_em=datetime.now().isoformat()
+        )
+        
+        # Adiciona dados extras do boleto
+        comp_dict = comprovante.to_dict()
+        comp_dict['boleto_dados'] = {
+            'linha_digitavel': dados.get('linha_digitavel', ''),
+            'codigo_barras': dados.get('codigo_barras', ''),
+            'banco': dados.get('banco', ''),
+            'beneficiario_cnpj': dados.get('beneficiario_cnpj', ''),
+            'nosso_numero': dados.get('nosso_numero', '')
+        }
+        
+        self.pendentes[user_id] = comp_dict
+        self._save_pendentes()
+        
+        return comp_dict
+    
+    def _converter_pix(self, dados: Dict, user_id: str) -> Dict[str, Any]:
+        """Converte dados de PIX para comprovante"""
+        comp_id = self._gerar_id(dados.get('id_transacao', str(datetime.now())))
+        
+        if dados.get('tipo_transacao') == 'enviado':
+            descricao = f"PIX enviado para {dados.get('destino_nome', 'Não identificado')}"
+            destinatario = dados.get('destino_nome', '')
+        else:
+            descricao = f"PIX recebido de {dados.get('origem_nome', 'Não identificado')}"
+            destinatario = dados.get('origem_nome', '')
+        
+        # Tenta categorizar pelo destinatário
+        categoria, confianca = self._sugerir_categoria(descricao, destinatario)
+        
+        comprovante = ComprovanteExtraido(
+            id=comp_id,
+            tipo='pix',
+            valor=dados.get('valor', 0.0),
+            descricao=descricao,
+            data=dados.get('data_hora', datetime.now().strftime('%Y-%m-%d'))[:10],
+            destinatario=destinatario,
+            categoria_sugerida=categoria,
+            confianca=max(confianca, dados.get('confianca', 0.0) / 100),
+            texto_original=dados.get('id_transacao', ''),
+            user_id=user_id,
+            status='pendente',
+            criado_em=datetime.now().isoformat()
+        )
+        
+        # Adiciona dados extras do PIX
+        comp_dict = comprovante.to_dict()
+        comp_dict['pix_dados'] = {
+            'chave_pix': dados.get('chave_pix', ''),
+            'tipo_chave': dados.get('tipo_chave', ''),
+            'id_transacao': dados.get('id_transacao', ''),
+            'origem_banco': dados.get('origem_banco', ''),
+            'destino_banco': dados.get('destino_banco', ''),
+            'origem_documento': dados.get('origem_documento', ''),
+            'destino_documento': dados.get('destino_documento', '')
+        }
+        
+        self.pendentes[user_id] = comp_dict
+        self._save_pendentes()
+        
+        return comp_dict
+    
+    def _converter_transferencia(self, dados: Dict, user_id: str) -> Dict[str, Any]:
+        """Converte dados de TED/DOC para comprovante"""
+        comp_id = self._gerar_id(dados.get('id_transacao', str(datetime.now())))
+        
+        tipo_trans = dados.get('tipo', 'Transferência')
+        descricao = f"{tipo_trans} para {dados.get('destino_nome', 'Não identificado')}"
+        
+        comprovante = ComprovanteExtraido(
+            id=comp_id,
+            tipo='transferencia',
+            valor=dados.get('valor', 0.0),
+            descricao=descricao,
+            data=dados.get('data_hora', datetime.now().strftime('%Y-%m-%d'))[:10],
+            destinatario=dados.get('destino_nome', ''),
+            categoria_sugerida='outros',
+            confianca=dados.get('confianca', 0.0) / 100,
+            texto_original=dados.get('id_transacao', ''),
+            user_id=user_id,
+            status='pendente',
+            criado_em=datetime.now().isoformat()
+        )
+        
+        # Adiciona dados extras
+        comp_dict = comprovante.to_dict()
+        comp_dict['transferencia_dados'] = {
+            'tipo': dados.get('tipo', ''),
+            'origem_banco': dados.get('origem_banco', ''),
+            'destino_banco': dados.get('destino_banco', ''),
+            'destino_agencia': dados.get('destino_agencia', ''),
+            'destino_conta': dados.get('destino_conta', '')
+        }
+        
+        self.pendentes[user_id] = comp_dict
+        self._save_pendentes()
+        
+        return comp_dict
+    
     def tem_pendente(self, user_id: str) -> bool:
-        """Verifica se usuário tem comprovante pendente"""
-        return user_id in self.pendentes
+        """Verifica se usuário tem comprovante pendente (válido por 5 min)"""
+        if user_id not in self.pendentes:
+            return False
+        
+        # Verifica se o comprovante pendente não expirou (5 minutos)
+        pendente = self.pendentes[user_id]
+        criado_em = pendente.get('criado_em', '')
+        if criado_em:
+            try:
+                data_criacao = datetime.fromisoformat(criado_em)
+                agora = datetime.now()
+                diferenca = (agora - data_criacao).total_seconds()
+                
+                # Se passou mais de 5 minutos, remove o pendente
+                if diferenca > 300:  # 5 minutos em segundos
+                    del self.pendentes[user_id]
+                    self._save_pendentes()
+                    return False
+            except:
+                pass
+        
+        return True
     
     def get_pendente(self, user_id: str) -> Optional[Dict]:
         """Obtém comprovante pendente do usuário"""

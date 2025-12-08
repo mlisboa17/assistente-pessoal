@@ -197,17 +197,22 @@ Para desconectar, digite: *logout*"""
                 
                 # Monta mensagem de sucesso com nome
                 saudacao = f", *{nome_usuario}*" if nome_usuario else ""
-                email_info = f"\n📧 E-mail: {email_usuario}" if email_usuario else ""
+                email_info = f"\n📧 {email_usuario}" if email_usuario else ""
                 
                 return f"""🎉 *Login realizado com sucesso{saudacao}!*
 
-✅ Sua conta Google foi conectada!{email_info}
+━━━━━━━━━━━━━━━━━━━━━
+✅ Google conectado{email_info}
+━━━━━━━━━━━━━━━━━━━━━
 
-Agora posso:
-📅 Acessar seu Google Calendar
-📧 Ler seus e-mails
+🆕 *Novas funcionalidades liberadas:*
 
-Experimente digitar: *agenda*"""
+📅 *Agenda* → "agenda" ou "criar evento"
+📧 *Emails* → "emails" ou "ler emails"
+
+━━━━━━━━━━━━━━━━━━━━━
+
+💬 Digite *menu* para ver todas as opções!"""
             else:
                 return """❌ *Código inválido ou expirado*
 
@@ -260,28 +265,42 @@ Tente novamente em alguns segundos."""
 
 📌 *Siga os passos:*
 
-*1️⃣ Clique no link abaixo:*
+*1️⃣ Clique no link para autorizar:*
+
+🔗 *Entrar com Google*
 {auth_url}
 
 *2️⃣ Escolha sua conta Google*
 
 *3️⃣ Clique em "Permitir"*
-(Pode aparecer aviso de app não verificado - clique em "Avançado" e depois "Acessar")
+_(Pode aparecer aviso de app não verificado - clique em "Avançado" → "Acessar")_
 
 *4️⃣ Copie o código que aparecer*
-O código começa com 4/
+O código começa com `4/`
 
 *5️⃣ Cole o código aqui neste chat*
 
 ━━━━━━━━━━━━━━━━━━━━━
 
-⏰ O código expira em 10 minutos!
+⏰ _O código expira em 10 minutos!_
 Se demorar, digite *login* novamente."""
     
     def _handle_logout(self, user_id: str) -> str:
         if self.disconnect_google(user_id):
-            return "Conta Google desconectada!\n\nUse /login para conectar novamente."
-        return "Erro ao desconectar."
+            return """✅ *Google desconectado!*
+
+━━━━━━━━━━━━━━━━━━━━━
+
+Você ainda pode usar:
+💰 Finanças
+📄 Boletos
+🧾 Comprovantes
+
+━━━━━━━━━━━━━━━━━━━━━
+
+👉 Digite *login* para reconectar
+💬 Digite *menu* para ver opções"""
+        return "❌ Erro ao desconectar."
     
     async def _get_google_events(self, user_id: str, time_min: datetime = None, time_max: datetime = None, max_results: int = 10) -> List[Dict]:
         if not self.google_auth:

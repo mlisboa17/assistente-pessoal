@@ -144,6 +144,41 @@ class Orchestrator:
             self.modules['comprovantes'] = ComprovantesModule()
         except ImportError:
             pass
+        
+        # Módulo de Cadastros
+        try:
+            from modules.cadastros import CadastrosModule
+            self.modules['cadastros'] = CadastrosModule()
+        except ImportError:
+            pass
+        
+        # Módulo de Agenda de Grupo
+        try:
+            from modules.agenda_grupo import AgendaGrupoModule
+            self.modules['agenda_grupo'] = AgendaGrupoModule()
+        except ImportError:
+            pass
+        
+        # Módulo de OCR
+        try:
+            from modules.ocr_engine import OCREngine
+            self.modules['ocr'] = OCREngine()
+        except ImportError:
+            pass
+        
+        # Módulo de Configurações
+        try:
+            from modules.configuracoes import ConfiguracoesModule
+            self.modules['configuracoes'] = ConfiguracoesModule()
+        except ImportError:
+            pass
+        
+        # Módulo de Monitor de Emails
+        try:
+            from modules.email_monitor import EmailMonitorModule
+            self.modules['email_monitor'] = EmailMonitorModule()
+        except ImportError:
+            pass
     
     async def process(self, message: str, user_id: str = None, 
                       attachments: list = None) -> str:
@@ -225,10 +260,11 @@ class Orchestrator:
         parsed = self.parser.parse(message)
         
         # Comandos especiais
-        if parsed.command in ['start', 'inicio']:
-            if 'perfil' in self.modules:
-                return self.modules['perfil'].get_mensagem_boas_vindas(user_id)
-            return RESPONSES['welcome']
+        if parsed.command in ['start', 'inicio', 'menu']:
+            return self._get_menu_principal(user_id)
+        
+        if parsed.command in ['oi', 'ola', 'hello', 'hi']:
+            return self._get_menu_principal(user_id)
         
         if parsed.command in ['help', 'ajuda']:
             return RESPONSES['help']
@@ -246,7 +282,7 @@ class Orchestrator:
             return self._get_status()
         
         # Comando de configurações
-        if parsed.command == 'config':
+        if parsed.command in ['config', 'configuracoes', 'configurações', 'settings']:
             if parsed.args:
                 sub_cmd = parsed.args[0].lower()
                 args_rest = parsed.args[1:] if len(parsed.args) > 1 else []
@@ -261,9 +297,45 @@ class Orchestrator:
                 elif sub_cmd == 'fuso' and 'perfil' in self.modules:
                     return await self.modules['perfil'].handle('config_fuso', args_rest, user_id)
             
-            if 'perfil' in self.modules:
+            # Usa o novo módulo de configurações se disponível
+            if 'configuracoes' in self.modules:
+                return await self.modules['configuracoes'].handle('config', [], user_id)
+            elif 'perfil' in self.modules:
                 return self.modules['perfil'].get_menu_config(user_id)
             return "Módulo de configurações não disponível."
+        
+        # Comandos de privacidade
+        if parsed.command in ['privacidade', 'privacy']:
+            if 'configuracoes' in self.modules:
+                return await self.modules['configuracoes'].handle('privacidade', parsed.args, user_id)
+            return "Módulo de configurações não disponível."
+        
+        # Comandos de notificações
+        if parsed.command in ['notificacoes', 'notificações', 'notifications']:
+            if 'configuracoes' in self.modules:
+                return await self.modules['configuracoes'].handle('notificacoes', parsed.args, user_id)
+            return "Módulo de configurações não disponível."
+        
+        # Comandos de preferências
+        if parsed.command in ['preferencias', 'preferências', 'preferences']:
+            if 'configuracoes' in self.modules:
+                return await self.modules['configuracoes'].handle('preferencias', parsed.args, user_id)
+            return "Módulo de configurações não disponível."
+        
+        # Comandos de monitoramento de emails (BLOQUEIA EM GRUPOS)
+        if parsed.command in ['monitorar', 'monitor', 'alertar', 'palavras', 'keywords']:
+            if 'email_monitor' in self.modules:
+                # Obtém serviço Gmail se disponível
+                gmail_service = None
+                if 'agenda' in self.modules and self.modules['agenda'].google_auth:
+                    gmail_service = self.modules['agenda'].google_auth.get_gmail_service(user_id)
+                
+                return await self.modules['email_monitor'].handle(
+                    parsed.command, parsed.args, user_id, 
+                    gmail_service=gmail_service, 
+                    is_group=False  # Em grupos será bloqueado
+                )
+            return "Módulo de monitoramento não disponível."
         
         # Comando exportar dados
         if parsed.command == 'exportar':
@@ -330,6 +402,11 @@ class Orchestrator:
         text = message.lower().strip()
         words = text.split()
         first_word = words[0] if words else ""
+        
+        # Comandos de saudação/menu - retorna menu principal
+        saudacoes = ['oi', 'ola', 'olá', 'hello', 'hi', 'menu', 'inicio', 'início', 'start', 'bom dia', 'boa tarde', 'boa noite']
+        if text in saudacoes or first_word in saudacoes:
+            return self._get_menu_principal(user_id)
         
         # Mapeamento de palavras para comandos
         comandos_diretos = {
@@ -448,7 +525,7 @@ class Orchestrator:
         return None
     
     async def _processar_confirmacao_comprovante(self, user_id: str, message: str) -> str:
-        """Processa confirmação de comprovante pendente"""
+        """Processa confirmação de comprovante pendente com novos comandos"""
         if 'comprovantes' not in self.modules:
             return None
         
@@ -458,7 +535,179 @@ class Orchestrator:
         if not comp_module.tem_pendente(user_id):
             return None
         
-        # Usa o novo método de processamento de resposta
+        texto = message.strip().upper()
+        texto_lower = message.lower().strip()
+        pendente = comp_module.get_pendente(user_id)
+        
+        # ========== NOVOS COMANDOS ==========
+        
+        # 1️⃣ COPIAR - Retorna o código para copiar
+        if texto in ['COPIAR', '1', 'CODIGO', 'CÓDIGO', 'CHAVE', 'COPIA']:
+            codigo = pendente.get('id_transacao', '') or pendente.get('linha_digitavel', '') or pendente.get('chave_pix', '')
+            if codigo:
+                return f"""📋 *Código para copiar:*
+
+```
+{codigo}
+```
+
+💡 Copie o código acima e cole no seu app de pagamento.
+
+━━━━━━━━━━━━━━━━━━━━
+Quando pagar, digite *PAGO* para registrar."""
+            else:
+                return "❌ Não há código disponível para este comprovante."
+        
+        # 2️⃣ PAGO - Marca como pago e registra despesa
+        if texto in ['PAGO', '2', 'PAGUEI', 'JA PAGUEI', 'CONFIRMADO'] or texto_lower.startswith('pago '):
+            # Verifica se especificou categoria
+            categoria = pendente.get('categoria', pendente.get('categoria_sugerida', 'outros'))
+            if texto_lower.startswith('pago '):
+                categoria = texto_lower.replace('pago ', '').strip()
+            
+            # Registra como despesa
+            resultado_despesa = ""
+            if 'financas' in self.modules:
+                financas = self.modules['financas']
+                despesa = {
+                    'valor': pendente.get('valor', 0),
+                    'categoria': categoria,
+                    'descricao': pendente.get('destinatario', '') or pendente.get('descricao', '') or pendente.get('tipo', 'Pagamento'),
+                    'data': pendente.get('data', ''),
+                    'tipo': 'despesa',
+                    'comprovante_id': pendente.get('id', '')
+                }
+                financas.adicionar_transacao(user_id, despesa)
+                resultado_despesa = f"💰 Despesa registrada: R$ {pendente.get('valor', 0):.2f} ({categoria})"
+            
+            # Remove pendência
+            comp_module.remover_pendente(user_id)
+            
+            valor_fmt = f"R$ {pendente.get('valor', 0):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            return f"""✅ *PAGAMENTO CONFIRMADO!*
+
+💰 *Valor:* {valor_fmt}
+🏷️ *Categoria:* {categoria.upper()}
+📅 *Data:* {pendente.get('data', 'Hoje')}
+
+{resultado_despesa}
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Use */financas* para ver seu extrato"""
+
+        # 3️⃣ DESPESA - Registra como despesa (sem marcar pago)
+        if texto in ['DESPESA', '3', 'GASTO', 'REGISTRAR'] or texto_lower.startswith('despesa '):
+            categoria = pendente.get('categoria', pendente.get('categoria_sugerida', 'outros'))
+            if texto_lower.startswith('despesa '):
+                categoria = texto_lower.replace('despesa ', '').strip()
+            
+            if 'financas' in self.modules:
+                financas = self.modules['financas']
+                despesa = {
+                    'valor': pendente.get('valor', 0),
+                    'categoria': categoria,
+                    'descricao': pendente.get('destinatario', '') or pendente.get('descricao', '') or pendente.get('tipo', 'Pagamento'),
+                    'data': pendente.get('data', ''),
+                    'tipo': 'despesa',
+                    'comprovante_id': pendente.get('id', '')
+                }
+                financas.adicionar_transacao(user_id, despesa)
+                
+                comp_module.remover_pendente(user_id)
+                
+                valor_fmt = f"R$ {pendente.get('valor', 0):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                return f"""💰 *DESPESA REGISTRADA!*
+
+💵 *Valor:* {valor_fmt}
+🏷️ *Categoria:* {categoria.upper()}
+📝 *Descrição:* {pendente.get('destinatario', '') or pendente.get('descricao', '-')}
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Use */financas* para ver seu extrato"""
+            return "❌ Módulo de finanças não disponível."
+
+        # 4️⃣ AGENDA / AGENDAR - Salva na agenda
+        if texto in ['AGENDA', 'AGENDAR', '4', 'LEMBRETE', 'SALVAR AGENDA']:
+            if 'agenda' in self.modules:
+                agenda = self.modules['agenda']
+                
+                # Monta dados do evento
+                descricao = pendente.get('destinatario', '') or pendente.get('beneficiario', '') or pendente.get('tipo', 'Pagamento')
+                valor = pendente.get('valor', 0)
+                data = pendente.get('data_vencimento', '') or pendente.get('data', '')
+                
+                titulo = f"💳 {descricao} - R$ {valor:.2f}"
+                
+                # Cria evento/lembrete
+                resultado = await agenda.handle('criar', [titulo, data], user_id, [])
+                
+                valor_fmt = f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                return f"""📅 *SALVO NA AGENDA!*
+
+📋 *Evento:* {titulo}
+📅 *Data:* {data or 'Hoje'}
+
+{resultado if 'criado' not in resultado.lower() else ''}
+
+━━━━━━━━━━━━━━━━━━━━
+Ainda posso:
+• *DESPESA* - Registrar como despesa
+• *PAGO* - Marcar como pago"""
+            return "❌ Módulo de agenda não disponível."
+
+        # 5️⃣ TUDO - Faz tudo de uma vez (pago + despesa + agenda)
+        if texto in ['TUDO', '5', 'TODOS', 'TODAS', 'COMPLETO']:
+            resultados = []
+            valor = pendente.get('valor', 0)
+            categoria = pendente.get('categoria', pendente.get('categoria_sugerida', 'outros'))
+            descricao = pendente.get('destinatario', '') or pendente.get('beneficiario', '') or pendente.get('descricao', '') or pendente.get('tipo', 'Pagamento')
+            data = pendente.get('data_vencimento', '') or pendente.get('data', '')
+            
+            # 1. Registra despesa
+            if 'financas' in self.modules:
+                financas = self.modules['financas']
+                despesa = {
+                    'valor': valor,
+                    'categoria': categoria,
+                    'descricao': descricao,
+                    'data': data,
+                    'tipo': 'despesa',
+                    'comprovante_id': pendente.get('id', '')
+                }
+                financas.adicionar_transacao(user_id, despesa)
+                resultados.append("✅ Despesa registrada")
+            
+            # 2. Salva na agenda
+            if 'agenda' in self.modules:
+                agenda = self.modules['agenda']
+                titulo = f"💳 {descricao} - R$ {valor:.2f}"
+                await agenda.handle('criar', [titulo, data], user_id, [])
+                resultados.append("✅ Salvo na agenda")
+            
+            # 3. Remove pendência (marca como pago)
+            comp_module.remover_pendente(user_id)
+            resultados.append("✅ Marcado como pago")
+            
+            valor_fmt = f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            return f"""⭐ *TUDO FEITO!*
+
+💰 *Valor:* {valor_fmt}
+🏷️ *Categoria:* {categoria.upper()}
+📝 *Descrição:* {descricao}
+📅 *Data:* {data or 'Hoje'}
+
+{chr(10).join(resultados)}
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Use */financas* para ver seu extrato
+📅 Use */agenda* para ver seus eventos"""
+
+        # ❌ CANCELAR
+        if texto in ['CANCELAR', 'NAO', 'NÃO', 'N', 'DESCARTAR', 'IGNORAR']:
+            comp_module.remover_pendente(user_id)
+            return "❌ Comprovante descartado."
+        
+        # Usa o novo método de processamento de resposta (legado)
         financas_module = self.modules.get('financas')
         resultado = comp_module.processar_resposta_confirmacao(
             message, user_id, financas_module
@@ -468,20 +717,16 @@ class Orchestrator:
         if resultado:
             return resultado
         
-        texto = message.strip().upper()
-        texto_lower = message.lower().strip()
-        
         # Comandos de edição
         # valor X
         if texto_lower.startswith('valor ') or texto_lower.startswith('valor:'):
             try:
                 valor_str = texto_lower.replace('valor:', '').replace('valor ', '').replace('r$', '').replace(',', '.').strip()
                 novo_valor = float(valor_str)
-                pendente = comp_module.get_pendente(user_id)
                 pendente['valor'] = novo_valor
                 comp_module.pendentes[user_id] = pendente
                 comp_module._save_pendentes()
-                return f"✅ Valor alterado para R$ {novo_valor:.2f}\n\nDigite *SIM* para confirmar ou continue editando."
+                return f"✅ Valor alterado para R$ {novo_valor:.2f}\n\nEscolha: *PAGO* | *DESPESA* | *AGENDA* | *TUDO*"
             except:
                 return "❌ Valor inválido. Use: *valor 100* ou *valor:50.90*"
         
@@ -489,17 +734,18 @@ class Orchestrator:
         if texto_lower.startswith('categoria ') or texto_lower.startswith('cat:'):
             cat = texto_lower.replace('categoria ', '').replace('cat:', '').strip()
             categorias_validas = ['alimentacao', 'combustivel', 'transporte', 'moradia', 
-                                  'saude', 'lazer', 'educacao', 'vestuario', 'tecnologia', 'outros']
+                                  'saude', 'lazer', 'educacao', 'vestuario', 'tecnologia', 
+                                  'contas', 'impostos', 'folha_pagamento', 'outros']
             # Normaliza
             cat = cat.replace('ã', 'a').replace('í', 'i').replace('ú', 'u').replace('ç', 'c')
             if cat in categorias_validas:
-                pendente = comp_module.get_pendente(user_id)
+                pendente['categoria'] = cat
                 pendente['categoria_sugerida'] = cat
                 comp_module.pendentes[user_id] = pendente
                 comp_module._save_pendentes()
-                return f"✅ Categoria alterada para {cat.title()}\n\nDigite *SIM* para confirmar."
+                return f"✅ Categoria alterada para *{cat.upper()}*\n\nEscolha: *PAGO* | *DESPESA* | *AGENDA* | *TUDO*"
             else:
-                return "❌ Categoria inválida.\n\nUse: alimentacao, combustivel, transporte, moradia, saude, lazer, educacao, vestuario, tecnologia, outros"
+                return "❌ Categoria inválida.\n\nUse: alimentacao, combustivel, transporte, moradia, saude, lazer, educacao, vestuario, tecnologia, contas, impostos, folha_pagamento, outros"
         
         # descricao X ou desc:X
         if texto_lower.startswith('descricao ') or texto_lower.startswith('descrição ') or texto_lower.startswith('desc:'):
@@ -507,25 +753,33 @@ class Orchestrator:
                 desc = message[5:].strip()
             else:
                 desc = message[10:].strip()
-            pendente = comp_module.get_pendente(user_id)
             pendente['descricao'] = desc
             comp_module.pendentes[user_id] = pendente
             comp_module._save_pendentes()
-            return f"✅ Descrição alterada para: {desc}\n\nDigite *SIM* para confirmar."
+            return f"✅ Descrição alterada para: *{desc}*\n\nEscolha: *PAGO* | *DESPESA* | *AGENDA* | *TUDO*"
+        
+        # SIM (compatibilidade)
+        if texto in ['SIM', 'S', 'OK', 'CONFIRMAR', 'SALVAR']:
+            # Faz o mesmo que PAGO
+            return await self._processar_confirmacao_comprovante(user_id, 'PAGO')
         
         # Não reconheceu - mostra opções
-        return """🤔 Não entendi.
+        return """🤔 *Não entendi.*
 
-Para o comprovante pendente, digite:
-• *SIM* - Confirmar e salvar
-• *NÃO* - Cancelar
-• *EDITAR* - Alterar dados
-• *1-9* - Escolher categoria diretamente
+*Escolha uma opção:*
 
-Ou para editar:
-• *valor:100* - Altera valor
-• *cat:alimentacao* - Altera categoria
-• *desc:Nova descrição* - Altera descrição"""
+1️⃣ *COPIAR* - Copiar código para pagar
+2️⃣ *PAGO* - Marcar como pago
+3️⃣ *DESPESA* - Registrar como despesa
+4️⃣ *AGENDA* - Salvar na agenda
+5️⃣ *TUDO* - Pago + Despesa + Agenda
+
+❌ *CANCELAR* - Descartar
+
+*Ou edite os dados:*
+• *valor 100* - Altera valor
+• *categoria alimentacao* - Altera categoria
+• *despesa contas* - Salva com categoria específica"""
     
     async def _handle_cancelar(self, args: list, user_id: str) -> str:
         """Processa comandos de cancelar/remover"""
@@ -638,24 +892,110 @@ Digite *ajuda* para ver todos os comandos disponíveis."""
         """Mensagem de boas-vindas simples sem exigir login"""
         return """👋 *Olá! Bem-vindo ao seu Assistente Pessoal!*
 
-Sou seu assistente inteligente. Posso te ajudar com:
+━━━━━━━━━━━━━━━━━━━━━
 
-💰 *Finanças* - "gastei 50 no mercado" ou "gastos"
-✅ *Tarefas* - "criar tarefa" ou "tarefas"
-🎯 *Metas* - "criar meta" ou "metas"
-📄 *Boletos* - Envie PDFs de faturas
-🧾 *Comprovantes* - Envie fotos de comprovantes
-🎤 *Áudio* - Envie mensagens de voz
+📌 *O que posso fazer por você:*
+
+💰 *Finanças* → "gastei 50 no mercado"
+📄 *Boletos* → Envie um PDF
+🧾 *Comprovantes* → Envie uma foto
+🎤 *Áudio* → Mande um áudio
 
 ━━━━━━━━━━━━━━━━━━━━━
 
-💡 *Exemplos do que você pode dizer:*
-• "gastei 150 no supermercado"
-• "recebi 2000 de salário"
-• "quanto gastei esse mês?"
-• "criar tarefa comprar leite"
+🔗 *Conecte sua conta Google* para:
+• 📅 Agendar compromissos
+• 📧 Gerenciar emails
 
-Digite *ajuda* para ver todos os comandos!"""
+👉 Digite *login* para conectar
+
+━━━━━━━━━━━━━━━━━━━━━
+
+💬 Digite *menu* para ver todas as opções!"""
+    
+    def _get_menu_principal(self, user_id: str = None) -> str:
+        """Menu principal com opções baseado no status do usuário"""
+        
+        # Verifica se está logado no Google
+        google_conectado = False
+        nome_usuario = None
+        
+        if 'agenda' in self.modules and self.modules['agenda'].google_auth:
+            google_auth = self.modules['agenda'].google_auth
+            if google_auth.is_authenticated(user_id):
+                google_conectado = True
+                try:
+                    user_info = google_auth.get_user_info(user_id)
+                    if user_info:
+                        nome_usuario = user_info.get('name', '').split()[0]  # Primeiro nome
+                except:
+                    pass
+        
+        # Header personalizado
+        if nome_usuario:
+            header = f"👋 *Olá, {nome_usuario}!*"
+        else:
+            header = "👋 *Olá!*"
+        
+        # Status Google
+        if google_conectado:
+            google_status = "✅ Google conectado"
+        else:
+            google_status = "⚪ Google não conectado"
+        
+        menu = f"""{header}
+
+━━━━━━━━━━━━━━━━━━━━━
+{google_status}
+━━━━━━━━━━━━━━━━━━━━━
+
+📌 *Escolha uma opção:*
+
+💰 *1. Finanças*
+   → "gastei", "recebi", "gastos"
+   
+📄 *2. Boletos/Faturas*
+   → Envie um PDF
+
+🧾 *3. Comprovantes*
+   → Envie uma foto
+   
+🎤 *4. Áudio*
+   → Mande um áudio"""
+        
+        # Opções Google (só se conectado)
+        if google_conectado:
+            menu += """
+
+📅 *5. Agenda*
+   → "eventos", "criar evento"
+   
+📧 *6. Emails*
+   → "emails", "ler emails" """
+        
+        menu += """
+
+━━━━━━━━━━━━━━━━━━━━━
+
+⚙️ *Outros comandos:*"""
+        
+        if not google_conectado:
+            menu += """
+• *login* → Conectar conta Google"""
+        else:
+            menu += """
+• *logout* → Desconectar Google"""
+        
+        menu += """
+• *ajuda* → Ver todos os comandos
+• *status* → Ver seu resumo
+• *config* → ⚙️ Configurações
+
+━━━━━━━━━━━━━━━━━━━━━
+
+💬 _Ou simplesmente me diga o que precisa!_"""
+        
+        return menu
     
     async def _handle_natural_language(self, message: str, user_id: str,
                                         attachments: list) -> str:

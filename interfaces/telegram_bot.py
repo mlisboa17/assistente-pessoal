@@ -1,6 +1,6 @@
 ﻿"""
- Interface Telegram
-Bot para Telegram usando python-telegram-bot
+🤖 Moga Bot - Interface Telegram
+Bot Assistente Pessoal Inteligente
 """
 import os
 import logging
@@ -28,10 +28,10 @@ except ImportError:
 
 
 class TelegramInterface:
-    """Interface do bot Telegram"""
+    """Interface do Moga Bot - Telegram"""
 
     # Nomes que ativam o bot em grupos
-    BOT_NAMES = ['bot', 'assistente', 'jarvis', 'alexa', 'siri']
+    BOT_NAMES = ['moga', 'moga_bot', 'mogabot', 'bot', 'assistente']
 
     def __init__(self, token: str, orchestrator):
         self.token = token
@@ -168,14 +168,15 @@ class TelegramInterface:
         self.app.add_handler(CallbackQueryHandler(self.handle_callback))
 
         # Inicia polling
-        logger.info(" Telegram Bot iniciado!")
+        logger.info("🤖 Moga Bot (Telegram) iniciado!")
         await self.app.initialize()
         await self.app.start()
         
         # Pega o username do bot
         bot_info = await self.app.bot.get_me()
         self.bot_username = bot_info.username
-        logger.info(f"🤖 Bot username: @{self.bot_username}")
+        logger.info(f"🤖 Moga Bot conectado: @{self.bot_username}")
+        logger.info(f"📝 Funcionalidades: Texto, Áudio, PDF, Comprovantes")
         
         await self.app.updater.start_polling(drop_pending_updates=True)
 
@@ -188,20 +189,24 @@ class TelegramInterface:
         user = update.effective_user
 
         welcome = f'''
- *Olá, {user.first_name}!*
+🤖 *Olá, {user.first_name}! Sou o Moga Bot!*
 
-Sou seu Assistente Pessoal Inteligente.
+Seu Assistente Pessoal Inteligente.
 
 Posso ajudar você com:
- *Agenda* - Compromissos e lembretes
- *E-mails* - Ler e gerenciar e-mails
- *Finanças* - Gastos e despesas
- *Faturas* - Processar faturas e boletos
- *Vendas* - Relatórios e estoque
- *Tarefas* - Lista de afazeres
- *Voz* - Envie áudios que eu transcrevo!
+📅 *Agenda* - Compromissos e lembretes
+📧 *E-mails* - Ler e gerenciar e-mails
+💰 *Finanças* - Gastos e despesas
+📄 *Faturas* - Processar boletos (PDF)
+🧾 *Comprovantes* - Análise com IA
+🛒 *Vendas* - Relatórios e estoque
+✅ *Tarefas* - Lista de afazeres
+🎤 *Voz* - Envie áudios que eu transcrevo!
 
 Digite /ajuda para ver todos os comandos.
+
+💡 _Você também pode usar linguagem natural!_
+Ex: "Me lembra de pagar a conta amanhã"
         '''
 
         keyboard = [
@@ -270,13 +275,19 @@ Digite /ajuda para ver todos os comandos.
                 return
             
             await update.message.reply_text(
-                "🔐 *Conectar conta Google*\n\n"
-                "Para conectar sua conta Google (Calendar, Gmail, Drive):\n\n"
-                f"1️⃣ [Clique aqui para autorizar]({auth_url})\n\n"
-                "2️⃣ Faça login com sua conta Google\n\n"
-                "3️⃣ Copie o código que aparecer\n\n"
-                "4️⃣ Envie o código aqui no chat\n\n"
-                "⏰ O código expira em 10 minutos.",
+                "🔐 *Conectar com Google*\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "📌 *Siga os passos:*\n\n"
+                f"*1️⃣ Clique no link para autorizar:*\n\n"
+                f"🔗 [Entrar com Google]({auth_url})\n\n"
+                "*2️⃣ Escolha sua conta Google*\n\n"
+                "*3️⃣ Clique em \"Permitir\"*\n"
+                "_(Pode aparecer aviso de app não verificado - clique em \"Avançado\" → \"Acessar\")_\n\n"
+                "*4️⃣ Copie o código que aparecer*\n"
+                "O código começa com `4/`\n\n"
+                "*5️⃣ Cole o código aqui neste chat*\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "⏰ _O código expira em 10 minutos!_",
                 parse_mode='Markdown',
                 disable_web_page_preview=True
             )
