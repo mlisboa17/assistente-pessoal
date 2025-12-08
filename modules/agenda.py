@@ -17,6 +17,11 @@ try:
 except ImportError:
     GOOGLE_AUTH_AVAILABLE = False
 
+try:
+    from modules.agendamento_avancado import get_sistema_agendamento
+    AGENDAMENTO_AVANCADO_AVAILABLE = True
+except ImportError:
+    AGENDAMENTO_AVANCADO_AVAILABLE = False
 
 @dataclass
 class Evento:
@@ -59,6 +64,11 @@ class AgendaModule:
         self.google_auth = None
         if GOOGLE_AUTH_AVAILABLE:
             self.google_auth = get_gemini_auth(data_dir)
+        
+        # Sistema avançado de agendamento com confirmação
+        self.agendamento_avancado = None
+        if AGENDAMENTO_AVANCADO_AVAILABLE:
+            self.agendamento_avancado = get_sistema_agendamento()
     
     def _load_data(self):
         if os.path.exists(self.eventos_file):
@@ -138,8 +148,19 @@ class AgendaModule:
             return await self._handle_login(user_id, [])
         if any(word in text_lower for word in ['lembrar', 'lembrete', 'avisar']):
             return self._criar_lembrete(user_id, message)
+        
+        # Processar respostas de confirmação de agendamento
+        if self.agendamento_avancado and user_id in self.agendamento_avancado.pendentes:
+            if any(word in text_lower for word in ['confirmar', 'ok', 'sim', 'cancelar', 'editar']):
+                resposta, dados = self.agendamento_avancado.processar_resposta(
+                    message,
+                    user_id,
+                    agenda_module=self
+                )
+                return resposta
+        
         if any(word in text_lower for word in ['marcar', 'agendar', 'reuniao']):
-            return await self._criar_evento(user_id, message, analysis)
+            return await self._criar_evento_interativo(user_id, message, analysis)
         if any(word in text_lower for word in ['agenda', 'hoje', 'compromissos']):
             return await self._get_agenda(user_id)
         return await self._get_agenda(user_id)
@@ -549,6 +570,52 @@ Você ainda pode usar:
         self.lembretes.append(lembrete.to_dict())
         self._save_data()
         return f"Lembrete Criado!\n\n{texto_limpo}\n{data_hora.strftime('%d/%m/%Y as %H:%M')}\nID: {lembrete.id}"
+    
+    async def _criar_evento_interativo(self, user_id: str, texto: str, analysis: Any) -> str:
+        """
+        Criar evento com confirmação interativa
+        
+        Fluxo:
+        1. Extrai data e hora do texto
+        2. Mostra confirmação com opções para editar
+        3. Aguarda confirmação do usuário
+        4. Cria evento + lembrete (2 horas antes)
+        """
+        
+        if not self.agendamento_avancado:
+            # Fallback para método antigo se sistema não disponível
+            return await self._criar_evento(user_id, texto, analysis)
+        
+        # Extrair dados do texto
+        entities = analysis.entities if analysis else {}
+        datetime_info = entities.get('datetime', {})
+        
+        # Detectar "amanhã"
+        amanha = any(word in texto.lower() for word in ['amanha'])
+        data = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d') if amanha else datetime.now().strftime('%Y-%m-%d')
+        
+        # Detectar hora
+        hora_match = re.search(r'(\d{1,2})[h:](\d{2})?', texto)
+        hora = f"{int(hora_match.group(1)):02d}:{hora_match.group(2) or '00'}" if hora_match else datetime_info.get('time', '09:00')
+        
+        # Extrair título
+        titulo = texto
+        for word in ['agendar', 'marcar', 'criar', 'amanha', 'hoje', 'as']:
+            titulo = re.sub(rf'\b{word}\b', '', titulo, flags=re.IGNORECASE)
+        if hora_match:
+            titulo = titulo.replace(hora_match.group(0), '')
+        titulo = titulo.strip()[:50] or "Compromisso"
+        
+        # Iniciar agendamento interativo
+        resposta = self.agendamento_avancado.iniciar_agendamento(
+            titulo=titulo,
+            data=data,
+            hora=hora,
+            user_id=user_id,
+            origem="natural"
+        )
+        
+        return resposta
     
     async def _criar_evento(self, user_id: str, texto: str, analysis: Any) -> str:
         entities = analysis.entities if analysis else {}

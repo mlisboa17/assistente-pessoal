@@ -311,22 +311,6 @@ Texto extraído (primeiros 500 caracteres):
 """
         
         return await self._processar_dados_boleto(dados, arquivo, user_id)
-                # Atualiza status
-                for b in self.boletos:
-                    if b['id'] == boleto.id:
-                        b['agendado'] = True
-                self._save_data()
-            except Exception as e:
-                resposta += f"\n⚠️ Não consegui agendar: {e}"
-        
-        resposta += f"""
-─────────────────────
-*Comandos:*
-/boletos - Ver todos os boletos
-/pago {boleto.id} - Marcar como pago
-"""
-        
-        return resposta
     
     async def _extrair_com_gemini(self, arquivo: str) -> Optional[Dict]:
         """Usa Gemini Vision para extrair dados do PDF"""
