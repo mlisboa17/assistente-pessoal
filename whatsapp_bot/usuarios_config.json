@@ -1,0 +1,23 @@
+{
+  "comentario": "Configuração de usuários do Moga Bot - Mapeamento de números para nomes",
+  "usuarios": {
+    "558197723921": {
+      "nome": "MARCIO",
+      "ativo": true,
+      "tipo": "admin",
+      "data_cadastro": "2025-12-07"
+    },
+    "558198180904": {
+      "nome": "Usuário 2",
+      "ativo": true,
+      "tipo": "usuario",
+      "data_cadastro": "2025-12-07"
+    }
+  },
+  "instrucoes": {
+    "numero": "Número de WhatsApp sem símbolos (apenas dígitos)",
+    "nome": "Nome que será usado para identificar o usuário",
+    "ativo": "true = usuário ativo, false = bloqueado",
+    "tipo": "admin = acesso total, usuario = acesso padrão"
+  }
+}

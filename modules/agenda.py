@@ -88,9 +88,12 @@ class AgendaModule:
             return None
         return self.google_auth.get_auth_url(user_id)
     
-    def complete_google_login(self, user_id: str, code: str) -> bool:
+    def complete_google_login(self, user_id: str, code: str) -> tuple:
+        """
+        Completa Google login - retorna (sucesso, erro_type)
+        """
         if not self.google_auth:
-            return False
+            return False, "NO_AUTH_MODULE"
         return self.google_auth.complete_auth(user_id, code)
     
     def disconnect_google(self, user_id: str) -> bool:
@@ -171,7 +174,9 @@ Para desconectar, digite: *logout*"""
             code = args[0].strip()
             print(f"[LOGIN] Tentando completar auth para user {user_id} com código: {code[:20]}...")
             
-            if self.complete_google_login(user_id, code):
+            sucesso, erro_type = self.complete_google_login(user_id, code)
+            
+            if sucesso:
                 # Obtém informações do usuário do Google
                 user_info = self.google_auth.get_user_info(user_id)
                 nome_usuario = ""
@@ -214,14 +219,95 @@ Para desconectar, digite: *logout*"""
 
 💬 Digite *menu* para ver todas as opções!"""
             else:
-                return """❌ *Código inválido ou expirado*
+                # Erro específico
+                if erro_type == "EXPIRED":
+                    return """❌ *Código expirado!*
 
-O código do Google expira em poucos minutos.
+⏱️ O código de autorização do Google **expira em apenas ~10 minutos**.
 
-🔄 Tente novamente:
+O seu código expirou. Isso acontece quando você demora muito para:
+1. Clicar no link de autorização
+2. Aceitar as permissões
+3. Copiar e enviar o código
+
+✅ *O que fazer agora:*
+
+1. Digite *login* novamente
+2. Clique no link (rápido!)
+3. Aceite as permissões do Google
+4. Copie o código que aparece (começa com `4/`)
+5. Cole aqui **em menos de 10 minutos**
+
+⏰ *Dica:* Não feche a aba do Google, tenha o WhatsApp aberto para colar rápido!"""
+                elif erro_type == "INVALID":
+                    return """❌ *Código inválido ou mal formatado!*
+
+O código que você enviou não foi aceito pelo Google.
+
+✅ *Possíveis causas:*
+- Código incompleto (não foi copiado inteiro)
+- Espaços em branco no início ou fim
+- Caracteres incorretos
+- Código expirado (mais de 10 minutos)
+
+✅ *Como corrigir:*
+
+1. Digite *login* para gerar novo link
+2. Clique no link do Google
+3. Aceite as permissões
+4. **Copie TODO o código** (começa com `4/` e termina com caracteres aleatórios)
+5. Cole aqui **sem adicionar nada**
+6. **Rápido!** Menos de 10 minutos!"""
+                elif erro_type == "SCOPE_CHANGED":
+                    return """⚠️ *Permissões precisam ser reconfirmadas!*
+
+O Google detectou uma mudança nas permissões. Isso é totalmente seguro!
+
+✅ *O que fazer:*
+
+1️⃣ Digite *login* novamente
+2️⃣ Clique no link do Google (agora vai mostrar permissões em detalhes)
+3️⃣ Na tela, verá:
+   🔘 "Moga Bot quer acessar sua Conta Google"
+   🔘 As permissões: Calendário, Gmail, Perfil
+   🔘 Clique em **ACEITAR**
+
+4️⃣ Copie o novo código (começa com `4/`)
+5️⃣ Cole aqui no WhatsApp
+
+⏱️ *Rápido!* O código expira em ~10 minutos!
+
+🔒 *Por que pede novamente?*
+Google exige reconfirmação de permissões por segurança.
+
+💡 *Dica:* Não reuse o código anterior - deve ser um novo!"""
+                elif erro_type == "CONFIG_ERROR":
+                    return """⚠️ *Erro de configuração do Google*
+
+O arquivo de credenciais (`credentials.json`) não foi configurado corretamente no servidor.
+
+📋 *Informações para o administrador:*
+- O arquivo está em `data/credentials.json`
+- Verifique se as credenciais OAuth estão corretas
+- As APIs do Google Calendar e Gmail devem estar ativadas
+
+Entre em contato com o administrador: *esse é um erro de configuração do servidor, não é culpa sua!*"""
+                else:
+                    return """❌ *Erro ao fazer login*
+
+Houve um erro desconhecido ao processar seu código.
+
+🔄 *Tente novamente:*
 1. Digite *login*
-2. Clique no novo link
-3. Cole o código rapidamente"""
+2. Clique no link
+3. Aceite as permissões
+4. Copie o código
+5. Cole aqui rapidamente
+
+Se o problema persistir, tente:
+- Fazer login novamente
+- Limpar o cache do navegador
+- Usar uma aba anônima/privada"""
         
         # Verifica se tem credenciais configuradas
         print(f"[LOGIN] Verificando google_auth: {self.google_auth is not None}")
@@ -259,31 +345,42 @@ O arquivo credentials.json não foi encontrado.
 Tente novamente em alguns segundos."""
         
         print(f"[LOGIN] Retornando mensagem com link!")
-        return f"""🔐 *Conectar com Google*
+        return f"""🔐 *Conectar com Google Calendar*
 
-━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📌 *Siga os passos:*
+⏰ *IMPORTANTE: O código expira em 10 minutos!*
 
-*1️⃣ Clique no link para autorizar:*
+👇 *Siga EXATAMENTE estes passos:*
 
-🔗 *Entrar com Google*
+*1️⃣ Clique no link abaixo:*
 {auth_url}
 
 *2️⃣ Escolha sua conta Google*
 
-*3️⃣ Clique em "Permitir"*
-_(Pode aparecer aviso de app não verificado - clique em "Avançado" → "Acessar")_
+*3️⃣ Clique em "Permitir" para dar acesso*
+   (Pode aparecer "app não verificado" - é normal!)
+   Clique em: "Avançado" → "Acessar assistente"
 
-*4️⃣ Copie o código que aparecer*
-O código começa com `4/`
+*4️⃣ Copie o código que aparecer**
+   ➡️ Começa com `4/`
+   ➡️ Tem muitas letras e números
+   ➡️ Copie TUDO
 
-*5️⃣ Cole o código aqui neste chat*
+*5️⃣ Cole o código aqui no chat RAPIDAMENTE*
+   (Você tem ~10 minutos!)
 
-━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-⏰ _O código expira em 10 minutos!_
-Se demorar, digite *login* novamente."""
+⚠️ *Se demorar mais de 10 minutos:*
+   - O código expira
+   - Você vai receber erro
+   - Apenas digite *login* novamente!
+
+✅ *Depois de conectado você poderá:*
+   📅 Ver sua agenda do Google
+   ➕ Criar eventos
+   📧 Ler emails"""
     
     def _handle_logout(self, user_id: str) -> str:
         if self.disconnect_google(user_id):

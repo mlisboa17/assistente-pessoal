@@ -1147,6 +1147,42 @@ def iniciar_monitor_emails():
     email_monitor_module.iniciar_monitor(get_gmail_service)
 
 
+
+@app.route('/test-oauth/<user_id>/<code>', methods=['GET'])
+def test_oauth(user_id, code):
+    """Testa OAuth manualmente (útil para debug)"""
+    try:
+        from modules.google_auth import GoogleAuthManager
+        auth_manager = GoogleAuthManager(data_dir="data")
+        
+        print(f"\n[DEBUG-OAUTH] Testando OAuth para user: {user_id}")
+        print(f"[DEBUG-OAUTH] Código: {code[:50]}...")
+        
+        sucesso, erro = auth_manager.complete_auth(user_id, code)
+        
+        if sucesso:
+            return jsonify({
+                'success': True,
+                'message': 'Login realizado com sucesso!',
+                'user_id': user_id
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': erro,
+                'user_id': user_id
+            }), 400
+            
+    except Exception as e:
+        print(f"[DEBUG-OAUTH] Erro: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 if __name__ == '__main__':
     print("""
 ╔══════════════════════════════════════════════════╗

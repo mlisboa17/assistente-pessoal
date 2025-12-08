@@ -28,6 +28,54 @@ if (!fs.existsSync(TEMP_FOLDER)) {
     fs.mkdirSync(TEMP_FOLDER, { recursive: true });
 }
 
+/**
+ * Carrega configuração de usuários
+ */
+function loadUsersConfig() {
+    try {
+        const configPath = './usuarios_config.json';
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            return config.usuarios || {};
+        }
+    } catch (err) {
+        console.warn('⚠️ Erro ao carregar usuarios_config.json:', err.message);
+    }
+    return {};
+}
+
+/**
+ * Obtém nome do usuário pelo número
+ */
+function getUserNameByNumber(number) {
+    const usersConfig = loadUsersConfig();
+    
+    // Remove @s.us ou @g.us se existir
+    const cleanNumber = number.split('@')[0];
+    
+    // Procura na configuração
+    if (usersConfig[cleanNumber]) {
+        return usersConfig[cleanNumber].nome;
+    }
+    
+    // Se não encontrar, retorna um nome padrão baseado no número
+    return `Usuário ${cleanNumber.slice(-4)}`;
+}
+
+/**
+ * Verifica se usuário está ativo
+ */
+function isUserActive(number) {
+    const usersConfig = loadUsersConfig();
+    const cleanNumber = number.split('@')[0];
+    
+    if (usersConfig[cleanNumber]) {
+        return usersConfig[cleanNumber].ativo !== false;
+    }
+    
+    return true; // Por padrão, usuários desconhecidos são ativos
+}
+
 async function connectToWhatsApp() {
     // Carrega estado de autenticação
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
@@ -90,13 +138,22 @@ async function connectToWhatsApp() {
 
             const from = msg.key.remoteJid;
             const pushName = msg.pushName || 'Usuário';
+            
+            // Obtém nome do usuário pela configuração ou pelo pushName
+            const userName = getUserNameByNumber(from) || pushName;
+            
+            // Verifica se usuário está ativo
+            if (!isUserActive(from)) {
+                console.log(`🚫 ${userName}: Usuário bloqueado`);
+                continue;
+            }
 
             try {
                 // === ÁUDIO ===
                 if (msg.message?.audioMessage) {
-                    console.log(`🎤 ${pushName}: [ÁUDIO RECEBIDO]`);
+                    console.log(`🎤 ${userName}: [ÁUDIO RECEBIDO]`);
                     await sock.sendMessage(from, { text: '🎤 Transcrevendo seu áudio...' });
-                    const response = await processAudio(msg, from, pushName);
+                    const response = await processAudio(msg, from, userName);
                     await sendWithButtons(sock, from, response);
                     console.log(`📤 Resposta enviada!`);
                     continue;
@@ -106,9 +163,9 @@ async function connectToWhatsApp() {
                 if (msg.message?.documentMessage) {
                     const filename = msg.message.documentMessage.fileName || 'arquivo';
                     const mimetype = msg.message.documentMessage.mimetype || '';
-                    console.log(`📄 ${pushName}: [ARQUIVO: ${filename}]`);
+                    console.log(`📄 ${userName}: [ARQUIVO: ${filename}]`);
                     await sock.sendMessage(from, { text: `📄 Processando arquivo: ${filename}...` });
-                    const response = await processFile(msg, from, pushName);
+                    const response = await processFile(msg, from, userName);
                     await sendWithButtons(sock, from, response);
                     console.log(`📤 Resposta enviada!`);
                     continue;
@@ -117,10 +174,40 @@ async function connectToWhatsApp() {
                 // === IMAGEM ===
                 if (msg.message?.imageMessage) {
                     const caption = msg.message.imageMessage.caption || '';
-                    console.log(`🖼️ ${pushName}: [IMAGEM] ${caption}`);
+                    console.log(`🖼️ ${userName}: [IMAGEM] ${caption}`);
                     await sock.sendMessage(from, { text: '🧾 Analisando comprovante...' });
                     // Processa como possível comprovante
-                    const response = await processImage(msg, from, pushName);
+                    const response = await processImage(msg, from, userName);
+                    await sendWithButtons(sock, from, response);
+                    console.log(`📤 Resposta enviada!`);
+                    continue;
+                }
+
+                // === CLIQUE EM BOTÃO ===
+                let buttonId = '';
+                if (msg.message?.buttonsResponseMessage?.selectedButtonId) {
+                    buttonId = msg.message.buttonsResponseMessage.selectedButtonId;
+                    console.log(`🔘 ${userName}: Clicou no botão: ${buttonId}`);
+                    
+                    // Converte ID de botão em comando
+                    let commandText = '';
+                    switch(buttonId) {
+                        case 'agenda': commandText = '/agenda'; break;
+                        case 'tarefas': commandText = '/tarefas'; break;
+                        case 'gastos': commandText = '/gastos'; break;
+                        case 'ajuda': commandText = '/ajuda'; break;
+                        case 'nova_tarefa': commandText = '/tarefa'; break;
+                        case 'concluir_tarefa': commandText = '/concluir'; break;
+                        case 'listar_tarefas': commandText = '/listar'; break;
+                        case 'adicionar_gasto': commandText = '/gasto'; break;
+                        case 'ver_gastos': commandText = '/gastos'; break;
+                        case 'relatorio': commandText = '/relatorio'; break;
+                        case 'sim': commandText = 'sim'; break;
+                        case 'nao': commandText = 'nao'; break;
+                        default: commandText = buttonId;
+                    }
+                    
+                    const response = await processMessage(commandText, from, userName, isGroup, groupName, participantId);
                     await sendWithButtons(sock, from, response);
                     console.log(`📤 Resposta enviada!`);
                     continue;
@@ -142,9 +229,9 @@ async function connectToWhatsApp() {
                 // Para grupos, o participante é quem enviou a mensagem
                 const participantId = isGroup ? (msg.key.participant || from) : from;
                 
-                console.log(`📩 ${pushName}${isGroup ? ` [${groupName}]` : ''}: ${text}`);
+                console.log(`📩 ${userName}${isGroup ? ` [${groupName}]` : ''}: ${text}`);
 
-                const response = await processMessage(text, from, pushName, isGroup, groupName, participantId);
+                const response = await processMessage(text, from, userName, isGroup, groupName, participantId);
                 await sendWithButtons(sock, from, response);
                 console.log(`📤 Resposta enviada!`);
 
@@ -153,50 +240,87 @@ async function connectToWhatsApp() {
                 await sendWithButtons(sock, from, '❌ Desculpe, ocorreu um erro ao processar sua mensagem.');
             }
         /**
-         * Envia mensagem com botões sempre que possível
+         * Envia mensagem com botões usando template (ButtonMessage)
+         * Este é o formato que realmente funciona no WhatsApp Web
          */
         async function sendWithButtons(sock, to, text) {
-            // Botões para comandos principais
-            const lower = text.toLowerCase();
-            if (lower.includes('comandos disponíveis') || lower.includes('olá! sou o moga bot') || lower.includes('não entendi') || lower.includes('use linguagem natural') || lower.includes('status do sistema')) {
-                await sock.sendMessage(to, {
-                    text: text,
-                    buttons: [
-                        {buttonId: '/ajuda', buttonText: {displayText: 'Ajuda'}, type: 1},
-                        {buttonId: '/tarefas', buttonText: {displayText: 'Tarefas'}, type: 1},
-                        {buttonId: '/gastos', buttonText: {displayText: 'Gastos'}, type: 1},
-                        {buttonId: '/agenda', buttonText: {displayText: 'Agenda'}, type: 1}
-                    ],
-                    headerType: 1
-                });
-                return;
+            try {
+                const lower = text.toLowerCase();
+                
+                // Menu principal
+                if (lower.includes('menu principal') || lower.includes('comandos disponíveis') || lower.includes('olá! sou o moga bot')) {
+                    await sock.sendMessage(to, {
+                        text: text,
+                        buttons: [
+                            { buttonId: 'agenda', buttonText: { displayText: '📅 Agenda' }, type: 1 },
+                            { buttonId: 'tarefas', buttonText: { displayText: '✅ Tarefas' }, type: 1 },
+                            { buttonId: 'gastos', buttonText: { displayText: '💰 Finanças' }, type: 1 },
+                            { buttonId: 'ajuda', buttonText: { displayText: '❓ Ajuda' }, type: 1 }
+                        ],
+                        headerType: 1
+                    });
+                    return;
+                }
+
+                // Google Login
+                if (lower.includes('conectar com google') || lower.includes('google calendar')) {
+                    // Para login, apenas texto pois precisa clicar no link
+                    await sock.sendMessage(to, { text });
+                    return;
+                }
+
+                // Confirmação Sim/Não
+                if (lower.includes('tem certeza') || lower.includes('confirmar') || lower.includes('deseja') || lower.includes('confirme')) {
+                    await sock.sendMessage(to, {
+                        text: text,
+                        buttons: [
+                            { buttonId: 'sim', buttonText: { displayText: '✅ Sim' }, type: 1 },
+                            { buttonId: 'nao', buttonText: { displayText: '❌ Não' }, type: 1 }
+                        ],
+                        headerType: 1
+                    });
+                    return;
+                }
+
+                // Tarefas
+                if (lower.includes('tarefas') && (lower.includes('criar') || lower.includes('nova') || lower.includes('adicionar'))) {
+                    await sock.sendMessage(to, {
+                        text: text,
+                        buttons: [
+                            { buttonId: 'nova_tarefa', buttonText: { displayText: '✨ Nova Tarefa' }, type: 1 },
+                            { buttonId: 'concluir_tarefa', buttonText: { displayText: '✅ Concluir' }, type: 1 },
+                            { buttonId: 'listar_tarefas', buttonText: { displayText: '📋 Listar' }, type: 1 }
+                        ],
+                        headerType: 1
+                    });
+                    return;
+                }
+
+                // Finanças
+                if (lower.includes('finanças') || lower.includes('gastos') || lower.includes('despesa')) {
+                    await sock.sendMessage(to, {
+                        text: text,
+                        buttons: [
+                            { buttonId: 'adicionar_gasto', buttonText: { displayText: '➕ Adicionar' }, type: 1 },
+                            { buttonId: 'ver_gastos', buttonText: { displayText: '📊 Ver' }, type: 1 },
+                            { buttonId: 'relatorio', buttonText: { displayText: '📈 Relatório' }, type: 1 }
+                        ],
+                        headerType: 1
+                    });
+                    return;
+                }
+
+                // Padrão: só texto
+                await sock.sendMessage(to, { text });
+            } catch (err) {
+                console.error('❌ Erro ao enviar mensagem:', err);
+                // Fallback para texto simples
+                try {
+                    await sock.sendMessage(to, { text });
+                } catch (e) {
+                    console.error('❌ Erro ao enviar fallback:', e);
+                }
             }
-            // Botões de confirmação sim/não
-            if (lower.includes('tem certeza') || lower.includes('confirmar') || lower.includes('deseja continuar')) {
-                await sock.sendMessage(to, {
-                    text: text,
-                    buttons: [
-                        {buttonId: 'sim', buttonText: {displayText: 'Sim'}, type: 1},
-                        {buttonId: 'nao', buttonText: {displayText: 'Não'}, type: 1}
-                    ],
-                    headerType: 1
-                });
-                return;
-            }
-            // Botões para tarefas
-            if (lower.includes('tarefas') && lower.includes('id')) {
-                await sock.sendMessage(to, {
-                    text: text,
-                    buttons: [
-                        {buttonId: '/tarefa', buttonText: {displayText: 'Nova Tarefa'}, type: 1},
-                        {buttonId: '/concluir', buttonText: {displayText: 'Concluir Tarefa'}, type: 1}
-                    ],
-                    headerType: 1
-                });
-                return;
-            }
-            // Padrão: só texto
-            await sock.sendMessage(to, { text });
         }
         }
     });
