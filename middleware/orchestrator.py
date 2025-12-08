@@ -47,6 +47,8 @@ class Orchestrator:
         try:
             from modules.emails import EmailModule
             self.modules['emails'] = EmailModule()
+            # 🆕 Conecta com autenticação Google para integração Gmail
+            # Depois que agenda for carregada, conectar google_auth
         except ImportError:
             pass
         
@@ -179,6 +181,13 @@ class Orchestrator:
             self.modules['email_monitor'] = EmailMonitorModule()
         except ImportError:
             pass
+        
+        # 🆕 CONECTAR GOOGLE_AUTH AOS MÓDULOS DEPENDENTES
+        if 'agenda' in self.modules and hasattr(self.modules['agenda'], 'google_auth'):
+            google_auth = self.modules['agenda'].google_auth
+            # Conecta email module com google_auth
+            if 'emails' in self.modules and google_auth:
+                self.modules['emails'].set_google_auth(google_auth)
     
     async def process(self, message: str, user_id: str = None, 
                       attachments: list = None) -> str:
