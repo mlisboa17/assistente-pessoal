@@ -53,7 +53,8 @@ class TarefasModule:
                      user_id: str, attachments: list = None) -> str:
         """Processa comandos de tarefas"""
         
-        if command == 'tarefa':
+        # Comando 'nova' ou 'tarefa' - cria tarefa
+        if command in ['tarefa', 'nova', 'criar']:
             if args:
                 return self._criar_tarefa(user_id, ' '.join(args))
             return "✅ Use: /tarefa [descrição da tarefa]"
@@ -79,7 +80,8 @@ class TarefasModule:
         elif command == 'todo':
             return self._listar_tarefas(user_id)
         
-        return "✅ Comandos: /tarefa, /tarefas, /concluir, /cancelar"
+        # Se chegou aqui, comando não reconhecido - retorna vazio ao invés de mostrar ajuda
+        return ""
     
     async def handle_natural(self, message: str, analysis: Any,
                               user_id: str, attachments: list = None) -> str:
@@ -102,7 +104,7 @@ class TarefasModule:
         return self._listar_tarefas(user_id)
     
     def _criar_tarefa(self, user_id: str, texto: str) -> str:
-        """Cria uma nova tarefa"""
+        """Cria uma nova tarefa com alarme automático"""
         from uuid import uuid4
         
         if not texto or len(texto) < 3:
@@ -117,12 +119,40 @@ class TarefasModule:
         elif any(word in texto_lower for word in ['depois', 'quando puder', 'baixa']):
             prioridade = 'baixa'
         
+        # Extrai data limite se houver
+        data_limite = ""
+        import re
+        
+        # Procura por "até" ou "para"
+        match_data = re.search(r'(até|para|antes de)\s+(\d{1,2}[/\-]\d{1,2}|amanhã|hoje|sexta|segunda|terça|quarta|quinta|sábado|domingo)', texto_lower)
+        if match_data:
+            data_texto = match_data.group(2)
+            try:
+                # Converte texto para data
+                hoje = datetime.now()
+                if data_texto == 'hoje':
+                    data_limite = hoje.strftime('%Y-%m-%d')
+                elif data_texto == 'amanhã':
+                    data_limite = (hoje + timedelta(days=1)).strftime('%Y-%m-%d')
+                else:
+                    # Tenta parsear data
+                    for fmt in ['%d/%m', '%d-%m']:
+                        try:
+                            data = datetime.strptime(data_texto, fmt)
+                            data_limite = data.replace(year=hoje.year).strftime('%Y-%m-%d')
+                            break
+                        except:
+                            pass
+            except:
+                pass
+        
         tarefa = Tarefa(
             id=str(uuid4())[:6],
             titulo=texto[:100],
             descricao=texto,
             prioridade=prioridade,
             status='pendente',
+            data_limite=data_limite,
             user_id=user_id,
             criado_em=datetime.now().isoformat()
         )
@@ -130,20 +160,90 @@ class TarefasModule:
         self.tarefas.append(tarefa.to_dict())
         self._save_data()
         
+        # Cria alarme automático se tem data limite
+        if data_limite:
+            self._criar_alarme_tarefa(user_id, texto, data_limite, tarefa.id, prioridade)
+        
         emoji_prio = {'alta': '🔴', 'media': '🟡', 'baixa': '🟢'}
         
-        return f"""
+        resposta = f"""
 ✅ *Tarefa Criada!*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📝 {texto[:50]}
-{emoji_prio[prioridade]} Prioridade: {prioridade.capitalize()}
-🔖 ID: `{tarefa.id}`
+📝 *Descrição:*
+{texto[:80]}
 
-_Use /concluir {tarefa.id} quando terminar._
+{emoji_prio[prioridade]} *Prioridade:* {prioridade.upper()}
+🔖 *ID:* `{tarefa.id}`
 """
+        
+        if data_limite:
+            data_formatada = datetime.strptime(data_limite, '%Y-%m-%d').strftime('%d/%m/%Y')
+            resposta += f"📅 *Prazo:* {data_formatada}\n"
+            resposta += f"⏰ *Alarme:* Criado automaticamente!\n"
+        
+        resposta += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        resposta += f"💡 Use `/concluir {tarefa.id}` quando terminar."
+        
+        return resposta
+    
+    def _criar_alarme_tarefa(self, user_id: str, texto: str, data_limite: str, tarefa_id: str, prioridade: str):
+        """Cria alarme automático para tarefa com prazo"""
+        try:
+            from modules.alertas import AlertasModule, Alerta
+            
+            # Define quando disparar baseado na prioridade
+            dt_limite = datetime.strptime(data_limite, '%Y-%m-%d')
+            
+            if prioridade == 'alta':
+                # Alta: 1 dia antes
+                dt_alarme = dt_limite - timedelta(days=1)
+            else:
+                # Média/Baixa: 2 dias antes
+                dt_alarme = dt_limite - timedelta(days=2)
+            
+            # Define horário do alarme (9h da manhã)
+            dt_alarme = dt_alarme.replace(hour=9, minute=0, second=0)
+            
+            if dt_alarme <= datetime.now():
+                return
+            
+            alerta_id = f"task_{tarefa_id}"
+            dias_faltam = (dt_limite.date() - datetime.now().date()).days
+            
+            mensagem = f"""📝 *LEMBRETE DE TAREFA!*
+
+{texto[:80]}
+
+📅 Prazo: {dt_limite.strftime('%d/%m/%Y')}
+⏰ Faltam {dias_faltam} dia(s)!
+"""
+            
+            prio_alerta = 3 if prioridade == 'alta' else 2
+            
+            alerta = Alerta(
+                id=alerta_id,
+                tipo='lembrete',
+                titulo=f"Tarefa: {texto[:30]}",
+                mensagem=mensagem,
+                prioridade=prio_alerta,
+                data_disparo=dt_alarme.isoformat(),
+                ativo=True,
+                user_id=user_id,
+                dados_extra={'tarefa_id': tarefa_id, 'data_limite': data_limite},
+                criado_em=datetime.now().isoformat()
+            )
+            
+            alertas_module = AlertasModule(self.data_dir)
+            alertas_module.alertas.append(alerta.to_dict())
+            alertas_module._save_data()
+            
+            print(f"[ALARME] Criado para tarefa: {texto[:30]} (prazo: {data_limite})")
+        except Exception as e:
+            print(f"[ALARME] Erro ao criar alarme de tarefa: {e}")
     
     def _listar_tarefas(self, user_id: str) -> str:
-        """Lista tarefas pendentes"""
+        """Lista tarefas pendentes com prazos e alarmes"""
         pendentes = [
             t for t in self.tarefas
             if t.get('user_id') == user_id and t.get('status') != 'concluida'
@@ -151,33 +251,82 @@ _Use /concluir {tarefa.id} quando terminar._
         
         if not pendentes:
             return """
-✅ *Suas Tarefas*
+✅ *SUAS TAREFAS*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🎉 Nenhuma tarefa pendente!
+🎉 *Nenhuma tarefa pendente!*
 
-_Use /tarefa [texto] para criar uma nova._
+💡 *Crie uma nova:*
+   • /tarefa comprar material
+   • /tarefa ligar cliente até amanhã
+   • /tarefa revisar projeto
 """
         
-        response = "✅ *Suas Tarefas*\n\n"
+        response = """✅ *SUAS TAREFAS*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"""
         
-        # Ordena por prioridade
-        ordem = {'alta': 0, 'media': 1, 'baixa': 2}
-        pendentes.sort(key=lambda x: ordem.get(x.get('prioridade', 'media'), 1))
+        # Ordena: primeiro por prazo (vencendo), depois por prioridade
+        hoje = datetime.now().date()
+        
+        def ordenar_tarefa(t):
+            # Prioriza tarefas com prazo próximo
+            data_limite = t.get('data_limite', '')
+            if data_limite:
+                try:
+                    dt = datetime.strptime(data_limite, '%Y-%m-%d').date()
+                    dias = (dt - hoje).days
+                    return (0, dias)  # Tarefas com prazo primeiro
+                except:
+                    pass
+            
+            # Depois por prioridade
+            ordem_prio = {'alta': (1, 0), 'media': (1, 1), 'baixa': (1, 2)}
+            return ordem_prio.get(t.get('prioridade', 'media'), (1, 1))
+        
+        pendentes.sort(key=ordenar_tarefa)
         
         emoji_prio = {'alta': '🔴', 'media': '🟡', 'baixa': '🟢'}
         emoji_status = {'pendente': '⬜', 'em_andamento': '🔄'}
         
-        for t in pendentes:
+        for idx, t in enumerate(pendentes, 1):
             prio = t.get('prioridade', 'media')
             status = t.get('status', 'pendente')
-            titulo = t.get('titulo', '')[:40]
+            titulo = t.get('titulo', '')[:60]
             id_tarefa = t.get('id', '')
+            data_limite = t.get('data_limite', '')
             
-            response += f"{emoji_status[status]} {emoji_prio[prio]} {titulo}\n"
-            response += f"   _ID: {id_tarefa}_\n"
+            response += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            response += f"{idx}. {emoji_status[status]} {emoji_prio[prio]} *{titulo}*\n"
+            response += f"   🔖 ID: `{id_tarefa}`\n"
+            
+            # Exibe prazo se existir
+            if data_limite:
+                try:
+                    dt_limite = datetime.strptime(data_limite, '%Y-%m-%d')
+                    dias_faltam = (dt_limite.date() - hoje).days
+                    
+                    data_fmt = dt_limite.strftime('%d/%m/%Y')
+                    
+                    if dias_faltam < 0:
+                        response += f"   🔴 *VENCIDA!* (prazo era {data_fmt})\n"
+                    elif dias_faltam == 0:
+                        response += f"   ⚡ *VENCE HOJE!* ({data_fmt})\n"
+                    elif dias_faltam == 1:
+                        response += f"   ⚠️ *Vence amanhã!* ({data_fmt})\n"
+                    elif dias_faltam <= 3:
+                        response += f"   📅 Prazo: {data_fmt} ({dias_faltam} dias)\n"
+                    else:
+                        response += f"   📅 Prazo: {data_fmt}\n"
+                    
+                    response += f"   ⏰ Alarme automático ativo\n"
+                except:
+                    pass
+            
+            response += "\n"
         
-        response += f"\n📊 Total: {len(pendentes)} tarefa(s)\n"
-        response += "\n_Use /concluir [id] para marcar como feita._"
+        response += "━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        response += f"📊 *Total:* {len(pendentes)} tarefa(s) pendente(s)\n\n"
+        response += "💡 Use `/concluir [id]` para marcar como feita."
         
         return response
     

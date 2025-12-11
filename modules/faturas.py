@@ -265,24 +265,68 @@ E posso agendar automaticamente na sua agenda!
                 print(f"[EXTRATOR-DOCUMENTOS] Erro: {e}")
         
         # === MÉTODO 3: EXTRAÇÃO DE TEXTO TRADICIONAL (Fallback) ===
+        texto_extraido = ""
         if PDF_AVAILABLE:
             try:
                 with pdfplumber.open(arquivo) as pdf:
                     for page in pdf.pages:
-                        texto += page.extract_text() or ""
+                        texto_extraido += page.extract_text() or ""
             except Exception as e:
                 print(f"Erro pdfplumber: {e}")
         
         # Fallback para PyPDF2
-        if not texto and PYPDF2_AVAILABLE:
+        if not texto_extraido and PYPDF2_AVAILABLE:
             try:
                 reader = PdfReader(arquivo)
                 for page in reader.pages:
-                    texto += page.extract_text() or ""
+                    texto_extraido += page.extract_text() or ""
             except Exception as e:
                 print(f"Erro PyPDF2: {e}")
         
-        # Se não conseguiu extrair nada
+        # Verifica se o texto tem encoding ruim (CID, etc)
+        if texto_extraido:
+            # Detecta encoding ruim
+            cid_count = texto_extraido.count('(cid:')
+            if cid_count > 10:  # Se tem muitos códigos CID
+                print(f"⚠️ Texto com encoding ruim detectado ({cid_count} códigos CID). Tentando OCR...")
+                texto_extraido = ""  # Força OCR
+        
+        # === MÉTODO 4: OCR EM PDF (quando texto extraído está ruim) ===
+        if not texto_extraido:
+            try:
+                from modules.ocr_engine import OCREngine
+                ocr = OCREngine()
+                
+                with open(arquivo, 'rb') as f:
+                    pdf_bytes = f.read()
+                
+                print("🔄 Aplicando OCR no PDF...")
+                texto = ocr.extrair_texto_pdf(pdf_bytes)
+                
+                if texto:
+                    print(f"✅ OCR extraiu {len(texto)} caracteres")
+                else:
+                    return """
+❌ Não consegui ler o PDF mesmo com OCR.
+
+Possíveis motivos:
+• PDF está protegido ou corrompido
+• Imagem de baixa qualidade
+• Poppler não instalado (necessário para OCR)
+
+💡 *Dica:* Tente tirar uma foto/print do boleto e enviar como imagem.
+"""
+            except Exception as e:
+                print(f"❌ Erro ao aplicar OCR: {e}")
+                return f"""
+❌ Erro ao processar PDF: {str(e)}
+
+💡 *Dica:* Tente enviar como imagem (foto do boleto).
+"""
+        else:
+            texto = texto_extraido
+        
+        # Se ainda não conseguiu extrair nada
         if not texto:
             return """
 ❌ Não consegui ler o PDF.
@@ -299,15 +343,20 @@ Possíveis motivos:
         dados = self._extrair_dados_boleto(texto)
         
         if not dados.get('valor') and not dados.get('linha_digitavel'):
+            # Mostra prévia menor do texto
+            preview = texto.replace('(cid:', ' ').replace(')', '')[:300]
             return f"""
 ⚠️ *PDF lido, mas não encontrei dados de boleto*
 
-Texto extraído (primeiros 500 caracteres):
+Texto extraído (prévia):
 ```
-{texto[:500]}...
+{preview}...
 ```
 
-💡 *Dica:* Se for um boleto escaneado, tente enviar como foto.
+💡 *Dicas:*
+• Tente enviar como **imagem/foto**
+• Certifique-se que é um boleto válido
+• Verifique se o boleto não está vencido
 """
         
         return await self._processar_dados_boleto(dados, arquivo, user_id)

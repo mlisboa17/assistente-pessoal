@@ -1,5 +1,8 @@
 """
 🎯 Orquestrador - Decide qual módulo acionar
+Com inteligência contextual para deduzir intenções
+E personalização de linguagem integrada no perfil
+Com gerenciamento de fluxos de conversação multi-turn
 """
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
@@ -8,6 +11,8 @@ import re
 from config.settings import COMMAND_MAPPING, RESPONSES
 from middleware.command_parser import CommandParser
 from middleware.nlp_engine import NLPEngine
+from middleware.inteligencia_contextual import get_inteligencia
+from middleware.conversation_flow import get_flow_manager
 
 
 @dataclass
@@ -33,6 +38,8 @@ class Orchestrator:
     def __init__(self):
         self.parser = CommandParser()
         self.nlp = NLPEngine()
+        self.inteligencia = get_inteligencia()  # 🧠 Inteligência contextual
+        self.flow_manager = get_flow_manager()  # 🔄 Gerenciador de conversas
         self.modules = {}
         self._load_modules()
     
@@ -208,6 +215,35 @@ class Orchestrator:
         if not message:
             return RESPONSES['unknown']
         
+        # 🗣️ APRENDE COM A MENSAGEM DO USUÁRIO (via módulo de perfil)
+        if user_id and 'perfil' in self.modules:
+            self.modules['perfil'].aprender_linguagem(user_id, message)
+        
+        # 🔄 VERIFICA SE ESTÁ EM UM FLUXO DE CONVERSA
+        if user_id and self.flow_manager.is_in_flow(user_id):
+            return await self._handle_conversation_flow(user_id, message)
+        
+        # 🧠 INTELIGÊNCIA CONTEXTUAL - Processa ANTES de tudo
+        resultado_ia = self.inteligencia.interpretar(message, user_id or 'default')
+        
+        # Se a IA retornou uma pergunta ou confirmação, envia direto (PERSONALIZADO)
+        if resultado_ia['tipo'] in ['pergunta', 'confirmacao']:
+            resposta = self._formatar_resposta_inteligente(resultado_ia)
+            if user_id and 'perfil' in self.modules:
+                resposta = self.modules['perfil'].adaptar_resposta(user_id, resposta)
+            return resposta
+        
+        # Se a IA pediu para executar, executa a ação
+        if resultado_ia['tipo'] == 'executar':
+            resposta = await self._executar_acao_inteligente(resultado_ia, user_id)
+            if user_id and 'perfil' in self.modules:
+                resposta = self.modules['perfil'].adaptar_resposta(user_id, resposta)
+            return resposta
+        
+        # Se cancelado
+        if resultado_ia['tipo'] == 'cancelado':
+            return resultado_ia['mensagem']
+        
         # Verifica se é novo usuário - marca onboarding como completo automaticamente
         if 'perfil' in self.modules and user_id:
             perfil_mod = self.modules['perfil']
@@ -352,6 +388,19 @@ class Orchestrator:
                 return await self.modules['perfil'].handle('exportar', [], user_id)
             return "Módulo de perfil não disponível."
         
+        # 🔄 Comandos de fluxos interativos
+        if parsed.command == 'flow_expense':
+            return self.start_interactive_flow(user_id, 'expense')
+        
+        if parsed.command == 'flow_income':
+            return self.start_interactive_flow(user_id, 'income')
+        
+        if parsed.command == 'flow_event':
+            return self.start_interactive_flow(user_id, 'event')
+        
+        if parsed.command == 'flow_task':
+            return self.start_interactive_flow(user_id, 'task')
+        
         # Comandos de segurança (sempre processar)
         if parsed.command in ['pin', 'seguranca']:
             if 'seguranca' in self.modules:
@@ -471,6 +520,12 @@ class Orchestrator:
             
             # Exportar
             'exportar': ('exportar', []),
+            
+            # 🔄 Fluxos interativos (nova feature)
+            'registrar_gasto': ('flow_expense', []),
+            'registrar_receita': ('flow_income', []),
+            'criar_evento': ('flow_event', []),
+            'criar_tarefa': ('flow_task', []),
         }
         
         # Verifica comando direto (primeira palavra)
@@ -1231,3 +1286,218 @@ Digite *ajuda* para ver todos os comandos disponíveis."""
             return f"🤔 Você quis dizer:\n" + "\n".join(suggestions) + "\n\nDigite /ajuda para mais opções."
         
         return RESPONSES['unknown']
+    
+    def _formatar_resposta_inteligente(self, resultado: Dict) -> str:
+        """Formata resposta da inteligência contextual"""
+        mensagem = resultado['mensagem']
+        
+        # Se tem sugestões, adiciona
+        if 'sugestoes' in resultado:
+            mensagem += "\n\n💡 Sugestões:\n"
+            for sug in resultado['sugestoes']:
+                mensagem += f"• {sug}\n"
+        
+        # Se tem botões, adiciona
+        if 'botoes' in resultado:
+            mensagem += "\n\n"
+            for botao in resultado['botoes']:
+                mensagem += f"{botao}  "
+        
+        return mensagem
+    
+    async def _executar_acao_inteligente(self, resultado: Dict, user_id: str) -> str:
+        """Executa ação deduzida pela IA"""
+        acao = resultado['acao']
+        dados = resultado['dados']
+        
+        try:
+            if acao in ['ler_emails', 'emails']:
+                if 'emails' not in self.modules:
+                    return "❌ Módulo de e-mails não disponível."
+                
+                quantidade = dados.get('quantidade', 10)
+                filtro = dados.get('filtro')
+                
+                if filtro:
+                    return await self.modules['emails'].handle('buscar', [filtro, str(quantidade)], user_id)
+                else:
+                    return await self.modules['emails'].handle('ler', [str(quantidade)], user_id)
+            
+            elif acao in ['criar_evento', 'agenda']:
+                if 'agenda' not in self.modules:
+                    return "❌ Módulo de agenda não disponível."
+                
+                # Formata: titulo|data|hora
+                titulo = dados.get('descricao', 'Compromisso')
+                data = dados.get('data')
+                hora = dados.get('hora')
+                
+                args = [titulo, data, hora]
+                return await self.modules['agenda'].handle('criar', args, user_id)
+            
+            elif acao in ['criar_lembrete', 'lembrete']:
+                if 'agenda' not in self.modules:
+                    return "❌ Módulo de agenda não disponível."
+                
+                descricao = dados.get('descricao')
+                data = dados.get('data')
+                hora = dados.get('hora')
+                
+                args = [descricao, data, hora]
+                return await self.modules['agenda'].handle('lembrete', args, user_id)
+            
+            elif acao in ['registrar_gasto', 'gasto']:
+                if 'financas' not in self.modules:
+                    return "❌ Módulo de finanças não disponível."
+                
+                valor = dados.get('valor')
+                descricao = dados.get('descricao', 'Gasto')
+                categoria = dados.get('categoria', 'outros')
+                
+                args = [str(valor), descricao, categoria]
+                return await self.modules['financas'].handle('gasto', args, user_id)
+            
+            elif acao in ['criar_tarefa', 'tarefa']:
+                if 'tarefas' not in self.modules:
+                    return "❌ Módulo de tarefas não disponível."
+                
+                descricao = dados.get('descricao')
+                return await self.modules['tarefas'].handle('nova', [descricao], user_id)
+            
+            return "❌ Ação não reconhecida."
+            
+        except Exception as e:
+            return f"❌ Erro ao executar ação: {str(e)}"
+    
+    async def _handle_conversation_flow(self, user_id: str, message: str) -> str:
+        """
+        🔄 Gerencia fluxos de conversação multi-turn
+        Usado quando o usuário está em uma conversa sequencial
+        """
+        flow = self.flow_manager.get_active_flow(user_id)
+        if not flow:
+            return None
+        
+        # Verifica comandos de cancelamento
+        if message.lower() in ['cancelar', 'sair', 'parar', 'desistir', 'não']:
+            self.flow_manager.cancel_flow(user_id)
+            return "✅ Operação cancelada."
+        
+        flow_type = flow.flow_type
+        current_step = flow.current_step
+        
+        # 💰 FLUXO DE REGISTRO DE GASTO
+        if flow_type == 'expense':
+            return await self._handle_expense_flow(user_id, message, current_step, flow)
+        
+        # 💵 FLUXO DE RECEITA
+        elif flow_type == 'income':
+            return await self._handle_income_flow(user_id, message, current_step, flow)
+        
+        # 📅 FLUXO DE EVENTO
+        elif flow_type == 'event':
+            return await self._handle_event_flow(user_id, message, current_step, flow)
+        
+        # 📋 FLUXO DE TAREFA
+        elif flow_type == 'task':
+            return await self._handle_task_flow(user_id, message, current_step, flow)
+        
+        return "❌ Tipo de fluxo desconhecido."
+    
+    async def _handle_expense_flow(self, user_id: str, message: str, step: str, flow) -> str:
+        """Gerencia fluxo de registro de gasto"""
+        # Adapta resposta ao estilo do usuário
+        def adaptar(resposta: str) -> str:
+            if 'perfil' in self.modules:
+                return self.modules['perfil'].adaptar_resposta(user_id, resposta)
+            return resposta
+        
+        if step == 'none' or step == 'valor':
+            # Extrai valor da mensagem
+            import re
+            match = re.search(r'(\d+[.,]?\d*)', message.replace(',', '.'))
+            if match:
+                valor = float(match.group(1))
+                self.flow_manager.collect_data(user_id, 'valor', valor)
+                self.flow_manager.update_step(user_id, 'descricao')
+                return adaptar(f"💰 R$ {valor:.2f} - Ok! O que você gastou?")
+            else:
+                attempts = self.flow_manager.increment_attempts(user_id)
+                if attempts >= 3:
+                    self.flow_manager.cancel_flow(user_id)
+                    return adaptar("❌ Muitas tentativas. Cancelado.")
+                return adaptar("❌ Não entendi o valor. Digite apenas números (ex: 50 ou 50.00)")
+        
+        elif step == 'descricao':
+            self.flow_manager.collect_data(user_id, 'descricao', message)
+            self.flow_manager.update_step(user_id, 'categoria')
+            return adaptar("📂 Qual a categoria? (ex: alimentação, transporte, lazer)")
+        
+        elif step == 'categoria':
+            self.flow_manager.collect_data(user_id, 'categoria', message.lower())
+            
+            # Coleta todos os dados
+            data = self.flow_manager.complete_flow(user_id)
+            
+            # Registra no módulo de finanças
+            if 'financas' in self.modules:
+                args = [str(data['valor']), data['descricao'], data['categoria']]
+                return await self.modules['financas'].handle('gasto', args, user_id)
+            
+            return adaptar(f"✅ Gasto registrado: R$ {data['valor']:.2f} - {data['descricao']} ({data['categoria']})")
+    
+    async def _handle_income_flow(self, user_id: str, message: str, step: str, flow) -> str:
+        """Gerencia fluxo de receita - similar ao expense"""
+        # Implementação similar ao expense_flow
+        pass
+    
+    async def _handle_event_flow(self, user_id: str, message: str, step: str, flow) -> str:
+        """Gerencia fluxo de criação de evento"""
+        # Implementação para eventos
+        pass
+    
+    async def _handle_task_flow(self, user_id: str, message: str, step: str, flow) -> str:
+        """Gerencia fluxo de criação de tarefa"""
+        # Implementação para tarefas
+        pass
+    
+    def start_interactive_flow(self, user_id: str, flow_type: str, initial_message: str = None) -> str:
+        """
+        🚀 Inicia um fluxo interativo de conversa
+        
+        Args:
+            user_id: ID do usuário
+            flow_type: Tipo do fluxo (expense, income, event, task)
+            initial_message: Mensagem inicial opcional
+            
+        Returns:
+            Primeira pergunta do fluxo
+        """
+        # Adapta resposta ao estilo do usuário
+        def adaptar(resposta: str) -> str:
+            if 'perfil' in self.modules:
+                return self.modules['perfil'].adaptar_resposta(user_id, resposta)
+            return resposta
+        
+        # Inicia o fluxo
+        flow = self.flow_manager.start_flow(user_id, flow_type)
+        
+        # Mensagens iniciais por tipo
+        if flow_type == 'expense':
+            self.flow_manager.update_step(user_id, 'valor')
+            return adaptar("💰 Vamos registrar um gasto!\n\nQual foi o valor?")
+        
+        elif flow_type == 'income':
+            self.flow_manager.update_step(user_id, 'valor')
+            return adaptar("💵 Vamos registrar uma receita!\n\nQual foi o valor?")
+        
+        elif flow_type == 'event':
+            self.flow_manager.update_step(user_id, 'titulo')
+            return adaptar("📅 Vamos criar um evento!\n\nQual o título?")
+        
+        elif flow_type == 'task':
+            self.flow_manager.update_step(user_id, 'descricao')
+            return adaptar("📋 Vamos criar uma tarefa!\n\nO que você precisa fazer?")
+        
+        return adaptar("Iniciando...")
+

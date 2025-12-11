@@ -71,7 +71,6 @@ class ComprovantesModule:
         r'VALOR:?\s*R?\$?\s*([\d.,]+)',
         r'Total:?\s*R?\$?\s*([\d.,]+)',
         r'TOTAL:?\s*R?\$?\s*([\d.,]+)',
-        r'Pagamento:?\s*R?\$?\s*([\d.,]+)',
         r'(\d{1,3}(?:\.\d{3})*,\d{2})',  # Formato brasileiro: 1.234,56
     ]
     
@@ -209,11 +208,12 @@ class ComprovantesModule:
         return hash_obj.hexdigest()[:8]
     
     def _extrair_valor(self, texto: str) -> Optional[float]:
-        """Extrai valor monetário do texto"""
+        """Extrai valor monetário do texto (última ocorrência)"""
+        # Usa padrões locais com findall para última ocorrência
         for padrao in self.PADROES_VALOR:
-            match = re.search(padrao, texto, re.IGNORECASE)
-            if match:
-                valor_str = match.group(1)
+            matches = re.findall(padrao, texto, re.IGNORECASE)
+            if matches:
+                valor_str = matches[-1]  # Última ocorrência
                 # Converte formato brasileiro para float
                 valor_str = valor_str.replace('.', '').replace(',', '.')
                 try:
@@ -245,9 +245,9 @@ class ComprovantesModule:
         
         if any(re.search(p, texto, re.IGNORECASE) for p in self.PADROES_PIX):
             return 'pix'
-        elif 'transferência' in texto_lower or 'ted' in texto_lower or 'doc' in texto_lower:
+        elif 'transferência' in texto_lower or 'ted' in texto_lower:
             return 'transferencia'
-        elif 'boleto' in texto_lower or 'código de barras' in texto_lower:
+        elif 'boleto' in texto_lower or 'código de barras' in texto_lower or 'comprovante de pagamento' in texto_lower or 'titulo' in texto_lower:
             return 'boleto'
         elif 'cartão' in texto_lower or 'crédito' in texto_lower or 'débito' in texto_lower:
             return 'cartao'

@@ -9,6 +9,13 @@ from typing import List, Dict, Optional, Any
 from dataclasses import dataclass, asdict
 from collections import defaultdict
 
+# Importa o módulo de extratos
+try:
+    from modules.importador_extratos import ImportadorExtratos, TipoExtrato
+except ImportError:
+    ImportadorExtratos = None
+    TipoExtrato = None
+
 
 @dataclass
 class Transacao:
@@ -183,6 +190,12 @@ class FinancasModule:
         self.pendencias_file = os.path.join(data_dir, "pendencias_categoria.json")
         self.sugestoes_file = os.path.join(data_dir, "sugestoes_categoria.json")
         self.categorias_personalizadas_file = os.path.join(data_dir, "categorias_personalizadas.json")
+        
+        # Inicializa importador de extratos
+        if ImportadorExtratos:
+            self.importador_extratos = ImportadorExtratos(data_dir)
+        else:
+            self.importador_extratos = None
         
         os.makedirs(data_dir, exist_ok=True)
         self._load_data()
@@ -731,7 +744,33 @@ Use `recategorizar {nome} <nova_categoria>` para movê-las."""
                 return self.adicionar_palavra_categoria(args[1], ' '.join(args[2:]))
             return "❌ Use: adicionar palavra <categoria> <palavra>"
         
-        return "💰 Comandos: /gastos, /despesas, /saldo, /categorias, /sugestoes"
+        # 🆕 Comandos de importação de extratos
+        elif command == 'importar' and args and args[0].lower() == 'extrato':
+            if not attachments:
+                return """📎 *Importar Extrato*
+
+Por favor, anexe um arquivo de extrato (CSV, PDF, TXT)
+
+📋 Formatos suportados:
+   • CSV genérico (com delimitador automático)
+   • Extrato Itaú
+   • Extrato Bradesco
+   • Cartão de Crédito
+   • Cartão de Débito
+
+💡 O sistema detectará automaticamente o tipo e categorizará os movimentos!"""
+            
+            # Processa arquivo anexado
+            conteudo = attachments[0].get('conteudo', '') if attachments else ""
+            nome = attachments[0].get('nome', 'extrato') if attachments else ""
+            tipo = args[1].lower() if len(args) > 1 else None
+            
+            return self.importar_extrato(conteudo, tipo, nome, user_id)
+        
+        elif command == 'listar' and args and args[0].lower() == 'extratos':
+            return self.listar_extratos_importados(user_id)
+        
+        return "💰 Comandos: /gastos, /despesas, /saldo, /categorias, /sugestoes, /importar extrato, /listar extratos"
     
     async def handle_natural(self, message: str, analysis: Any,
                               user_id: str, attachments: list = None) -> str:
@@ -760,7 +799,7 @@ Use `recategorizar {nome} <nova_categoria>` para movê-las."""
         return self._resumo_gastos(user_id)
     
     def _registrar_despesa(self, user_id: str, args: List[str]) -> str:
-        """Registra uma despesa"""
+        """Registra uma despesa com validação inteligente"""
         from uuid import uuid4
         
         if not args:
@@ -775,7 +814,10 @@ Use `recategorizar {nome} <nova_categoria>` para movê-las."""
         
         # Resto é a descrição
         descricao = ' '.join(args[1:]) if len(args) > 1 else "Despesa"
-        categoria = self._detectar_categoria(descricao)
+        
+        # 🆕 Tentar detectar categoria do texto completo (incluindo descrição)
+        texto_completo = f"{descricao} {' '.join(args)}"
+        categoria = self._detectar_categoria(texto_completo)
         
         transacao = Transacao(
             id=str(uuid4())[:8],
@@ -973,3 +1015,112 @@ _Use /despesas [valor] [descrição] para registrar._
             'outros': '📦'
         }
         return emojis.get(categoria, '📦')
+    
+    # ==========================================
+    # 🆕 IMPORTAÇÃO DE EXTRATOS
+    # ==========================================
+    
+    def importar_extrato(self, conteudo: str, tipo_extrato: str = None, 
+                        nome_arquivo: str = "", user_id: str = "") -> str:
+        """
+        Importa um extrato bancário ou de cartão de crédito
+        
+        Args:
+            conteudo: Conteúdo do arquivo
+            tipo_extrato: Tipo do extrato (detecta automaticamente se não informado)
+            nome_arquivo: Nome do arquivo original
+            user_id: ID do usuário
+        
+        Returns:
+            Mensagem com resultado da importação
+        """
+        if not self.importador_extratos:
+            return "❌ Módulo de importação de extratos não disponível"
+        
+        try:
+            # Importa o extrato
+            resultado = self.importador_extratos.importar(
+                conteudo,
+                tipo=TipoExtrato[tipo_extrato.upper()] if tipo_extrato else None,
+                nome_arquivo=nome_arquivo,
+                user_id=user_id
+            )
+            
+            if resultado['status'] != 'sucesso':
+                return f"❌ {resultado['mensagem']}"
+            
+            # Adiciona movimentos importados às transações
+            movimentos = self.importador_extratos.obter_movimentos(resultado['id_importacao'])
+            
+            if movimentos:
+                self._integrar_movimentos_importados(movimentos['movimentos'], user_id)
+            
+            return f"""
+✅ *Extrato Importado com Sucesso!*
+
+📊 Resumo:
+   • Movimentos: {resultado['movimentos']}
+   • Valor Total: R$ {resultado['total_valor']:.2f}
+   • Período: {resultado['metadata'].get('periodo_inicio')} a {resultado['metadata'].get('periodo_fim')}
+
+💡 Os movimentos foram adicionados às suas finanças e categorizados automaticamente.
+Use `/gastos` para ver o resumo atualizado."""
+        
+        except Exception as e:
+            return f"❌ Erro ao importar extrato: {str(e)}"
+    
+    def _integrar_movimentos_importados(self, movimentos: List[Dict], user_id: str):
+        """Integra movimentos importados às transações"""
+        from uuid import uuid4
+        
+        for mov in movimentos:
+            transacao = Transacao(
+                id=str(uuid4())[:8],
+                tipo=mov['tipo'],
+                valor=mov['valor'],
+                descricao=mov['descricao'],
+                categoria=mov.get('categoria_sugerida', 'outros'),
+                data=mov['data'],
+                user_id=user_id,
+                criado_em=datetime.now().isoformat()
+            )
+            self.transacoes.append(transacao.to_dict())
+        
+        self._save_data()
+    
+    def listar_extratos_importados(self, user_id: str = "") -> str:
+        """Lista extratos já importados"""
+        if not self.importador_extratos:
+            return "❌ Módulo de importação não disponível"
+        
+        importacoes = self.importador_extratos.listar_importacoes(user_id, limit=10)
+        
+        if not importacoes:
+            return "📭 Nenhum extrato importado ainda"
+        
+        texto = "📊 *Seus Extratos Importados*\n\n"
+        for e in importacoes:
+            tipo_emoji = {
+                'csv_generico': '📄',
+                'itau': '🏦',
+                'bradesco': '🏦',
+                'cartao_credito': '💳',
+                'cartao_debito': '💳'
+            }.get(e.get('tipo', '?'), '📄')
+            
+            data = e.get('data_importacao', '')[:10]
+            movimentos = e.get('metadata', {}).get('total_movimentos', 0)
+            
+            texto += f"{tipo_emoji} *{e['nome_arquivo']}*\n"
+            texto += f"   📅 {data}\n"
+            texto += f"   📈 {movimentos} movimentos\n\n"
+        
+        return texto
+    
+    def detectar_tipo_extrato(self, conteudo: str, nome_arquivo: str = "") -> str:
+        """Detecta o tipo de extrato"""
+        if not self.importador_extratos:
+            return "desconhecido"
+        
+        tipo = self.importador_extratos.detectar_tipo(conteudo, nome_arquivo)
+        return tipo.value

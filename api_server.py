@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.dirname(__file__))
 
 from middleware.orchestrator import Orchestrator
+from middleware.formatador_respostas import humanizar
 
 load_dotenv()
 
@@ -56,6 +57,25 @@ try:
     print("📊 Módulo Extrator de Documentos carregado!")
 except ImportError as e:
     print(f"⚠️ Módulo Extrator de Documentos não disponível: {e}")
+
+# Módulo de extratos bancários (Sistema Zero)
+extrator_bancario = None
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'modules'))
+    from extratobancario_importacao_discere import SistemaExtratoZero
+    extrator_bancario = SistemaExtratoZero()
+    print("🏦 Sistema de Extração Bancária (Sistema Zero) carregado!")
+except ImportError as e:
+    print(f"⚠️ Sistema de Extração Bancária não disponível: {e}")
+
+# Módulo de tarifas bancárias
+tarifas_bancarias = None
+try:
+    from tarifas_bancarias import RepositorioTarifas
+    tarifas_bancarias = RepositorioTarifas()
+    print("💳 Módulo de Tarifas Bancárias carregado!")
+except ImportError as e:
+    print(f"⚠️ Módulo de Tarifas Bancárias não disponível: {e}")
 
 
 # Módulo de agenda de grupo
@@ -127,9 +147,12 @@ def process_message():
         )
         loop.close()
         
+        # Humaniza a resposta antes de enviar
+        response_humanizada = humanizar(response)
+        
         return jsonify({
             'success': True,
-            'response': response
+            'response': response_humanizada
         })
         
     except Exception as e:
@@ -1106,9 +1129,9 @@ def iniciar_monitor_emails():
     def get_gmail_service(user_id: str):
         """Obtém serviço Gmail para um usuário"""
         try:
-            # Usa o módulo de agenda que tem o gemini_auth
-            from modules.gemini_auth import GeminiAuthManager
-            auth = GeminiAuthManager(data_dir="data")
+            # Usa o módulo de agenda que tem o google_auth
+            from modules.google_auth import GoogleAuthManager
+            auth = GoogleAuthManager(data_dir="data")
             return auth.get_gmail_service(user_id)
         except Exception as e:
             print(f"Erro ao obter Gmail service: {e}")
@@ -1147,13 +1170,225 @@ def iniciar_monitor_emails():
     email_monitor_module.iniciar_monitor(get_gmail_service)
 
 
+# ==================== ENDPOINTS DE EXTRATOS BANCÁRIOS ====================
+
+def _formatar_extrato_bancario(resultado, filename):
+    """Formata resultado de extração de extrato bancário"""
+    transacoes_novas = resultado.get('transacoes_novas', 0)
+    transacoes_duplicadas = resultado.get('transacoes_duplicadas', 0)
+    layout_reconhecido = resultado.get('layout_reconhecido', False)
+    banco = resultado.get('banco_detectado', 'Desconhecido')
+    nome_layout = resultado.get('nome_layout', '')
+    
+    msg = f"✅ *Extrato Processado com Sucesso!*\n\n"
+    msg += f"📄 Arquivo: `{filename}`\n"
+    msg += f"🏦 Banco: *{banco}*\n"
+    
+    if layout_reconhecido:
+        msg += f"✨ Layout: _{nome_layout}_\n"
+    else:
+        msg += f"🆕 Layout: _Novo (aprendido)_\n"
+    
+    msg += f"\n📊 *Transações:*\n"
+    msg += f"   • Novas: *{transacoes_novas}*\n"
+    
+    if transacoes_duplicadas > 0:
+        msg += f"   • Duplicadas (ignoradas): {transacoes_duplicadas}\n"
+    
+    if 'transacoes_sample' in resultado:
+        msg += f"\n💰 *Últimas 5 transações:*\n"
+        for t in resultado['transacoes_sample'][:5]:
+            tipo_simbolo = "+" if t.get('tipo_movimento') == 'C' else "-"
+            msg += f"\n{tipo_simbolo} R$ {t.get('valor', 0):,.2f}\n"
+            msg += f"   {t.get('data_movimento')} | {t.get('descricao_original', '')[:40]}\n"
+    
+    msg += f"\n\n✅ Extrato salvo no banco de dados!"
+    return msg
+
+
+def _formatar_layout_desconhecido(resultado, filename):
+    """Formata resultado quando layout não é reconhecido"""
+    colunas = resultado.get('colunas_detectadas', [])
+    fingerprint = resultado.get('fingerprint', '')
+    
+    msg = f"🆕 *Layout Novo Detectado!*\n\n"
+    msg += f"📄 Arquivo: `{filename}`\n"
+    msg += f"🔑 Fingerprint: `{fingerprint[:16]}...`\n"
+    msg += f"📋 Colunas encontradas: {len(colunas)}\n\n"
+    msg += f"💡 O sistema aprenderá automaticamente\n"
+    msg += f"nas próximas vezes!"
+    
+    return msg
+
+
+def _formatar_tarifas(tarifas):
+    """Formata lista de tarifas bancárias"""
+    total = sum(t['valor'] for t in tarifas)
+    
+    msg = f"💳 *TARIFAS BANCÁRIAS*\n"
+    msg += f"{'='*40}\n\n"
+    msg += f"Total: *{len(tarifas)} tarifa(s)*\n"
+    msg += f"Valor: *R$ {total:,.2f}*\n\n"
+    
+    por_codigo = {}
+    for t in tarifas:
+        cod = t['codigo']
+        if cod not in por_codigo:
+            por_codigo[cod] = []
+        por_codigo[cod].append(t)
+    
+    for codigo, lista in sorted(por_codigo.items()):
+        classif = lista[0]['classificacao']
+        subtotal = sum(t['valor'] for t in lista)
+        
+        msg += f"\n🔹 *{classif['nome']}*\n"
+        msg += f"   Código: {codigo}\n"
+        msg += f"   {len(lista)}x = R$ {subtotal:,.2f}\n"
+        
+        for t in lista[:3]:
+            msg += f"   • R$ {t['valor']:,.2f}\n"
+        
+        if len(lista) > 3:
+            msg += f"   ... +{len(lista) - 3}\n"
+    
+    msg += f"\n{'='*40}\n"
+    msg += f"💰 *TOTAL: R$ {total:,.2f}*\n\n"
+    msg += f"💡 _PIX é gratuito para PF!_"
+    
+    return msg
+
+
+@app.route('/process-extrato', methods=['POST'])
+def process_extrato():
+    """Processa extrato bancário PDF"""
+    try:
+        data = request.json
+        file_base64 = data.get('file', '')
+        filename = data.get('filename', 'extrato.pdf')
+        user_id = data.get('user_id', 'whatsapp_user')
+        senha = data.get('senha', None)
+        
+        if not file_base64:
+            return jsonify({'success': False, 'response': '❌ Nenhum arquivo recebido.'}), 400
+        
+        if not extrator_bancario:
+            return jsonify({'success': False, 'response': '❌ Sistema não disponível.'}), 500
+        
+        file_bytes = base64.b64decode(file_base64)
+        
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            f.write(file_bytes)
+            file_path = f.name
+        
+        try:
+            resultado = extrator_bancario.processar_extrato(file_path, senha_pdf=senha)
+            
+            if resultado['status'] == 'sucesso':
+                return jsonify({'success': True, 'response': _formatar_extrato_bancario(resultado, filename)})
+            elif resultado['status'] == 'layout_desconhecido':
+                return jsonify({'success': True, 'response': _formatar_layout_desconhecido(resultado, filename)})
+            elif resultado['status'] == 'senha_necessaria':
+                return jsonify({'success': False, 'response': f"🔒 PDF protegido\n\nEnvie: extrato senha:SUASENHA"})
+            else:
+                return jsonify({'success': False, 'response': f"❌ {resultado.get('mensagem', 'Erro')}"})
+        
+        finally:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'response': f'❌ Erro: {str(e)}'}), 500
+
+
+@app.route('/process-tarifas', methods=['POST'])
+def process_tarifas():
+    """Analisa tarifas bancárias"""
+    try:
+        data = request.json
+        file_base64 = data.get('file', '')
+        senha = data.get('senha', None)
+        
+        if not file_base64:
+            return jsonify({'success': False, 'response': '❌ Arquivo não recebido.'}), 400
+        
+        if not tarifas_bancarias:
+            return jsonify({'success': False, 'response': '❌ Módulo não disponível.'}), 500
+        
+        file_bytes = base64.b64decode(file_base64)
+        
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            f.write(file_bytes)
+            file_path = f.name
+        
+        try:
+            import tabula
+            import pandas as pd
+            import re
+            
+            dfs = tabula.read_pdf(file_path, pages='all', multiple_tables=True,
+                                lattice=False, stream=True, guess=True, password=senha)
+            
+            if not dfs:
+                return jsonify({'success': False, 'response': '❌ Não foi possível extrair.'})
+            
+            df = pd.concat(dfs, ignore_index=True)
+            tarifas = []
+            
+            for idx, row in df.iterrows():
+                valores = [str(v).strip() for v in row.values if pd.notna(v) and str(v).strip() and str(v) != 'nan']
+                if valores:
+                    linha = ' '.join(valores)
+                    
+                    match_codigo = re.search(r'\b(9903|13013|13373)(?:\.0)?\b', linha)
+                    match_debito = re.search(r'([\d.,]+)\s*\([\-]\)', linha)
+                    
+                    if match_codigo and match_debito:
+                        codigo = match_codigo.group(1)
+                        valor_str = match_debito.group(1).replace('.', '').replace(',', '.')
+                        
+                        try:
+                            valor = float(valor_str)
+                            classificacao = tarifas_bancarias.classificar_tarifa(codigo)
+                            
+                            tarifas.append({
+                                'codigo': codigo,
+                                'valor': valor,
+                                'classificacao': classificacao,
+                                'linha': linha[:100]
+                            })
+                            
+                            tarifas_bancarias.registrar_tarifa_historico(
+                                codigo=codigo,
+                                valor=valor,
+                                data_transacao=datetime.now().strftime('%Y-%m-%d'),
+                                linha_original=linha[:200]
+                            )
+                        except:
+                            pass
+            
+            if tarifas:
+                return jsonify({'success': True, 'response': _formatar_tarifas(tarifas)})
+            else:
+                return jsonify({'success': True, 'response': '✅ *Nenhuma tarifa encontrada!*\n\n🎉'})
+        
+        finally:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'response': f'❌ Erro: {str(e)}'}), 500
+
 
 @app.route('/test-oauth/<user_id>/<code>', methods=['GET'])
 def test_oauth(user_id, code):
     """Testa OAuth manualmente (útil para debug)"""
     try:
-        from modules.gemini_auth import GeminiAuthManager
-        auth_manager = GeminiAuthManager(data_dir="data")
+        from modules.google_auth import GoogleAuthManager
+        auth_manager = GoogleAuthManager(data_dir="data")
         
         print(f"\n[DEBUG-OAUTH] Testando OAuth para user: {user_id}")
         print(f"[DEBUG-OAUTH] Código: {code[:50]}...")

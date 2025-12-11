@@ -21,6 +21,7 @@ openai>=1.0.0               # OpenAI (PAGO - último recurso)
 # Processamento de Arquivos
 PyPDF2>=3.0.0
 pdfplumber>=0.9.0
+pypdfium2>=4.30.0          # Extração de texto avançada de PDF
 openpyxl>=3.1.0
 python-docx>=0.8.11
 
@@ -59,10 +60,19 @@ pyzbar>=0.1.9               # Leitura de código de barras
 validate-docbr>=1.10.0      # Validação CPF, CNPJ, CNH
 brazilcep>=7.0.0            # Consulta de CEP
 python-barcode>=0.15.0      # Geração de códigos de barras
+pyboleto>=0.6.0             # Geração de boletos bancários brasileiros
+brazilian-utils>=1.0.0      # Utilitários brasileiros adicionais
 
 # Extratos e Documentos Financeiros
 ofxparse>=0.21              # Parser de arquivos OFX (extratos bancários)
 ofxtools>=0.9.5             # Ferramentas avançadas OFX
+
+# Extração de Tabelas de PDF
+opencv-python>=4.8.0         # Processamento de imagem para OCR
+pytesseract>=0.3.10          # OCR com Tesseract
+tabula-py>=2.8.0             # Extração de tabelas de PDF
+camelot-py>=0.10.1           # Extração avançada de tabelas
+pandas>=2.0.0                # Manipulação de dados
 
 # Utilitários
 python-dotenv>=1.0.0

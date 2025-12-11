@@ -12,7 +12,7 @@ from dataclasses import dataclass, asdict
 from uuid import uuid4
 
 try:
-    from modules.gemini_auth import get_gemini_auth, GeminiAuthManager
+    from modules.google_auth import get_google_auth, GoogleAuthManager
     GOOGLE_AUTH_AVAILABLE = True
 except ImportError:
     GOOGLE_AUTH_AVAILABLE = False
@@ -63,7 +63,7 @@ class AgendaModule:
         self._load_data()
         self.google_auth = None
         if GOOGLE_AUTH_AVAILABLE:
-            self.google_auth = get_gemini_auth(data_dir)
+            self.google_auth = get_google_auth(data_dir)
         
         # Sistema avançado de agendamento com confirmação
         self.agendamento_avancado = None
@@ -126,6 +126,14 @@ class AgendaModule:
             return await self._get_compromissos(user_id)
         if command == 'lembretes':
             return self._get_lembretes(user_id)
+        if command in ['confirmar']:
+            if args:
+                return await self._confirmar_evento(user_id, args[0])
+            return "Use: /confirmar [id]"
+        if command in ['alterar', 'editar']:
+            if args:
+                return await self._alterar_evento(user_id, args[0])
+            return "Use: /alterar [id]"
         if command in ['cancelar', 'remover']:
             if args:
                 return await self._cancelar_item(user_id, args[0])
@@ -134,7 +142,7 @@ class AgendaModule:
             if args:
                 return await self._criar_evento_comando(user_id, ' '.join(args))
             return "Use: /agendar [titulo] [data] [hora]"
-        return "Comandos: /agenda, /agendar, /lembrete, /login"
+        return "Comandos: /agenda, /agendar, /lembrete, /confirmar, /alterar, /cancelar, /login"
     
     async def handle_natural(self, message: str, analysis: Any, user_id: str, attachments: list = None) -> str:
         text_lower = message.lower()
@@ -480,66 +488,336 @@ Você ainda pode usar:
     async def _get_agenda(self, user_id: str) -> str:
         hoje = datetime.now()
         hoje_str = hoje.strftime('%Y-%m-%d')
-        response = f"Agenda de Hoje ({hoje.strftime('%d/%m/%Y')})\n\n"
+        
+        response = f"""📅 *AGENDA DE HOJE*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📆 {hoje.strftime('%d/%m/%Y - %A')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"""
+        
         eventos_hoje = []
+        
+        # Busca eventos do Google Calendar
         if self.is_google_connected(user_id):
-            response += "Conectado ao Google Calendar\n\n"
+            response += "✅ *Google Calendar Conectado*\n\n"
             google_events = await self._get_google_events(user_id, time_min=hoje.replace(hour=0, minute=0), time_max=hoje.replace(hour=23, minute=59))
             for event in google_events:
                 start = event.get('start', {})
                 hora = ""
+                dt_evento = None
                 if 'dateTime' in start:
-                    dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
-                    hora = dt.strftime('%H:%M')
+                    dt_evento = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
+                    hora = dt_evento.strftime('%H:%M')
                 elif 'date' in start:
                     hora = "Dia todo"
-                eventos_hoje.append({'hora': hora, 'titulo': event.get('summary', 'Sem titulo'), 'fonte': 'google'})
+                
+                # Cria alarme automático para o evento
+                if dt_evento:
+                    self._criar_alarme_compromisso(user_id, event.get('summary', 'Compromisso'), dt_evento, event.get('id'))
+                
+                eventos_hoje.append({
+                    'hora': hora, 
+                    'titulo': event.get('summary', 'Sem titulo'), 
+                    'fonte': 'google',
+                    'id': event.get('id'),
+                    'descricao': event.get('description', ''),
+                    'dt': dt_evento
+                })
         else:
-            response += "Modo local (use /login para conectar ao Google)\n\n"
+            response += "📍 *Modo Local* (use /login para Google)\n\n"
+        
+        # Busca eventos locais
         for evento in self.eventos:
             if evento.get('user_id') == user_id and evento.get('data') == hoje_str:
-                eventos_hoje.append({'hora': evento.get('hora', '--:--'), 'titulo': evento.get('titulo', 'Sem titulo'), 'fonte': 'local', 'id': evento.get('id')})
+                # Cria alarme automático
+                try:
+                    hora_evento = evento.get('hora', '00:00')
+                    dt_evento = datetime.strptime(f"{hoje_str} {hora_evento}", "%Y-%m-%d %H:%M")
+                    self._criar_alarme_compromisso(user_id, evento.get('titulo', 'Compromisso'), dt_evento, evento.get('id'))
+                except:
+                    dt_evento = None
+                
+                eventos_hoje.append({
+                    'hora': evento.get('hora', '--:--'), 
+                    'titulo': evento.get('titulo', 'Sem titulo'), 
+                    'fonte': 'local', 
+                    'id': evento.get('id'),
+                    'descricao': evento.get('descricao', ''),
+                    'dt': dt_evento
+                })
+        
+        # Busca lembretes
         lembretes_hoje = [l for l in self.lembretes if l.get('user_id') == user_id and l.get('ativo') and l.get('data_hora', '').startswith(hoje_str)]
+        
+        # Cria alarmes para lembretes
+        for lembrete in lembretes_hoje:
+            try:
+                dt_lembrete = datetime.fromisoformat(lembrete.get('data_hora', ''))
+                self._criar_alarme_lembrete(user_id, lembrete.get('texto', ''), dt_lembrete, lembrete.get('id'))
+            except:
+                pass
+        
         if not eventos_hoje and not lembretes_hoje:
-            response += "Nenhum compromisso para hoje.\n\nDiga 'agendar reuniao amanha as 10h' para criar."
+            response += """✨ *Nenhum compromisso para hoje*\n\n
+💡 *Sugestões:*
+   • "agendar reunião amanhã às 10h"
+   • "lembrar de ligar para o João às 15h"
+   • "compromisso médico sexta 14h"""
             return response
+        
+        # Exibe compromissos organizados por horário
         if eventos_hoje:
-            response += "Compromissos:\n"
-            for ev in sorted(eventos_hoje, key=lambda x: x.get('hora', '')):
-                icone = "[G]" if ev.get('fonte') == 'google' else "[L]"
-                response += f"  {icone} {ev['hora']} - {ev['titulo']}\n"
+            response += "📋 *SEUS COMPROMISSOS:*\n\n"
+            
+            for idx, ev in enumerate(sorted(eventos_hoje, key=lambda x: x.get('hora', '')), 1):
+                icone_fonte = "🌐" if ev.get('fonte') == 'google' else "📍"
+                hora = ev['hora']
+                titulo = ev['titulo']
+                
+                # Cabeçalho do evento
+                response += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                response += f"{idx}. {icone_fonte} *{hora}* - {titulo}\n"
+                
+                # Descrição se existir
+                if ev.get('descricao'):
+                    response += f"   📝 {ev['descricao']}\n"
+                
+                # Status do alarme
+                if ev.get('dt'):
+                    minutos_faltam = int((ev['dt'] - hoje).total_seconds() / 60)
+                    if minutos_faltam > 0:
+                        if minutos_faltam <= 30:
+                            response += f"   ⏰ *ALERTA:* Faltam {minutos_faltam} minutos! 🔔\n"
+                        elif minutos_faltam <= 60:
+                            response += f"   ⏰ Alarme em {minutos_faltam} minutos\n"
+                        else:
+                            horas = minutos_faltam // 60
+                            response += f"   ⏰ Alarme programado ({horas}h antes)\n"
+                    elif minutos_faltam >= -30:
+                        response += f"   ▶️ *ACONTECENDO AGORA*\n"
+                
+                # ID e opções
+                event_id = ev.get('id', '')
+                if event_id:
+                    response += f"   🔖 ID: `{event_id[:8]}`\n"
+                    response += f"\n   🔧 *Opções:*\n"
+                    response += f"      • `confirmar {event_id[:8]}`\n"
+                    response += f"      • `reagendar {event_id[:8]}`\n"
+                    response += f"      • `cancelar {event_id[:8]}`\n"
+                
+                response += "\n"
+        
+        # Exibe lembretes
         if lembretes_hoje:
-            response += "\nLembretes:\n"
-            for lembrete in lembretes_hoje:
-                response += f"  - {lembrete.get('texto', '')}\n"
+            response += "\n🔔 *LEMBRETES ATIVOS:*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            for idx, lembrete in enumerate(sorted(lembretes_hoje, key=lambda x: x.get('data_hora', '')), 1):
+                try:
+                    dt_lembrete = datetime.fromisoformat(lembrete.get('data_hora', ''))
+                    hora_lembrete = dt_lembrete.strftime('%H:%M')
+                    minutos_faltam = int((dt_lembrete - hoje).total_seconds() / 60)
+                    
+                    response += f"{idx}. 🔔 *{hora_lembrete}* - {lembrete.get('texto', '')}\n"
+                    
+                    if minutos_faltam > 0:
+                        if minutos_faltam <= 15:
+                            response += f"   ⚡ *IMINENTE:* {minutos_faltam} min!\n"
+                        else:
+                            response += f"   ⏰ Alarme em {minutos_faltam} min\n"
+                    elif minutos_faltam >= -15:
+                        response += f"   🔴 *AGORA!*\n"
+                    
+                    response += f"   🔖 ID: `{lembrete.get('id', '')[:8]}`\n\n"
+                except:
+                    response += f"{idx}. 🔔 {lembrete.get('texto', '')}\n\n"
+        
+        response += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        response += "💡 *Dica:* Os alarmes dispararão automaticamente!"
+        
         return response
     
+    def _criar_alarme_compromisso(self, user_id: str, titulo: str, dt_evento: datetime, evento_id: str):
+        """Cria alarme automático para compromisso"""
+        try:
+            # Importa módulo de alertas
+            from modules.alertas import AlertasModule, Alerta
+            
+            # Calcula tempo de antecedência (30 minutos antes)
+            dt_alarme = dt_evento - timedelta(minutes=30)
+            
+            # Verifica se já não passou
+            if dt_alarme <= datetime.now():
+                return
+            
+            # Cria alerta
+            alerta_id = f"comp_{evento_id[:8]}"
+            mensagem = f"📅 *Compromisso em 30 minutos!*\n\n{titulo}\n🕐 {dt_evento.strftime('%H:%M')}"
+            
+            alerta = Alerta(
+                id=alerta_id,
+                tipo='compromisso',
+                titulo=f"Lembrete: {titulo}",
+                mensagem=mensagem,
+                prioridade=3,  # Alta
+                data_disparo=dt_alarme.isoformat(),
+                ativo=True,
+                user_id=user_id,
+                dados_extra={'evento_id': evento_id, 'hora_evento': dt_evento.isoformat()},
+                criado_em=datetime.now().isoformat()
+            )
+            
+            # Adiciona à lista de alertas (se módulo disponível)
+            alertas_module = AlertasModule(self.data_dir)
+            alertas_module.alertas.append(alerta.to_dict())
+            alertas_module._save_data()
+            
+            print(f"[ALARME] Criado para compromisso: {titulo} às {dt_evento.strftime('%H:%M')}")
+        except Exception as e:
+            print(f"[ALARME] Erro ao criar alarme de compromisso: {e}")
+    
+    def _criar_alarme_lembrete(self, user_id: str, texto: str, dt_lembrete: datetime, lembrete_id: str):
+        """Cria alarme automático para lembrete"""
+        try:
+            from modules.alertas import AlertasModule, Alerta
+            
+            # Alarme no horário exato
+            if dt_lembrete <= datetime.now():
+                return
+            
+            alerta_id = f"lemb_{lembrete_id[:8]}"
+            mensagem = f"🔔 *LEMBRETE!*\n\n{texto}"
+            
+            alerta = Alerta(
+                id=alerta_id,
+                tipo='lembrete',
+                titulo=f"Lembrete: {texto[:30]}",
+                mensagem=mensagem,
+                prioridade=2,  # Média
+                data_disparo=dt_lembrete.isoformat(),
+                ativo=True,
+                user_id=user_id,
+                dados_extra={'lembrete_id': lembrete_id},
+                criado_em=datetime.now().isoformat()
+            )
+            
+            alertas_module = AlertasModule(self.data_dir)
+            alertas_module.alertas.append(alerta.to_dict())
+            alertas_module._save_data()
+            
+            print(f"[ALARME] Criado para lembrete: {texto} às {dt_lembrete.strftime('%H:%M')}")
+        except Exception as e:
+            print(f"[ALARME] Erro ao criar alarme de lembrete: {e}")
+    
     async def _get_compromissos(self, user_id: str) -> str:
+        """Lista próximos compromissos com visualização melhorada"""
         hoje = datetime.now()
-        response = "Proximos Compromissos:\n\n"
+        
+        response = f"""📅 *PRÓXIMOS COMPROMISSOS*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📆 Agenda dos próximos 30 dias
+━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"""
+        
         compromissos = []
+        
+        # Google Calendar
         if self.is_google_connected(user_id):
-            google_events = await self._get_google_events(user_id, time_min=hoje, time_max=hoje + timedelta(days=30), max_results=15)
+            google_events = await self._get_google_events(user_id, time_min=hoje, time_max=hoje + timedelta(days=30), max_results=20)
             for event in google_events:
                 start = event.get('start', {})
                 if 'dateTime' in start:
                     dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
-                    compromissos.append({'data': dt.strftime('%d/%m'), 'hora': dt.strftime('%H:%M'), 'titulo': event.get('summary', 'Sem titulo'), 'fonte': 'google'})
+                    
+                    # Cria alarme automático
+                    self._criar_alarme_compromisso(user_id, event.get('summary', 'Compromisso'), dt, event.get('id'))
+                    
+                    compromissos.append({
+                        'dt': dt,
+                        'data': dt.strftime('%d/%m/%Y'), 
+                        'hora': dt.strftime('%H:%M'), 
+                        'titulo': event.get('summary', 'Sem titulo'), 
+                        'fonte': 'google',
+                        'descricao': event.get('description', '')
+                    })
+        
+        # Eventos locais
         for evento in self.eventos:
             if evento.get('user_id') != user_id:
                 continue
             try:
-                data = datetime.strptime(evento.get('data', ''), '%Y-%m-%d')
-                if data >= hoje:
-                    compromissos.append({'data': data.strftime('%d/%m'), 'hora': evento.get('hora', ''), 'titulo': evento.get('titulo', ''), 'fonte': 'local'})
+                data_str = evento.get('data', '')
+                hora_str = evento.get('hora', '00:00')
+                dt = datetime.strptime(f"{data_str} {hora_str}", '%Y-%m-%d %H:%M')
+                
+                if dt >= hoje:
+                    # Cria alarme automático
+                    self._criar_alarme_compromisso(user_id, evento.get('titulo', 'Compromisso'), dt, evento.get('id', ''))
+                    
+                    compromissos.append({
+                        'dt': dt,
+                        'data': dt.strftime('%d/%m/%Y'), 
+                        'hora': hora_str, 
+                        'titulo': evento.get('titulo', ''), 
+                        'fonte': 'local',
+                        'descricao': evento.get('descricao', '')
+                    })
             except:
                 pass
+        
         if not compromissos:
-            return "Nenhum compromisso agendado."
-        for c in compromissos[:15]:
-            icone = "[G]" if c.get('fonte') == 'google' else "[L]"
-            hora = f" {c['hora']}" if c.get('hora') else ""
-            response += f"{icone} {c['data']}{hora} - {c['titulo']}\n"
+            return """✨ *Nenhum compromisso agendado*\n\n
+💡 *Crie um agora:*
+   • "agendar reunião amanhã 10h"
+   • "compromisso médico sexta 14h"""
+        
+        # Ordena por data/hora
+        compromissos.sort(key=lambda x: x['dt'])
+        
+        # Agrupa por data
+        data_atual = None
+        for idx, c in enumerate(compromissos[:15], 1):
+            dt = c['dt']
+            
+            # Cabeçalho de nova data
+            if c['data'] != data_atual:
+                data_atual = c['data']
+                dias_faltam = (dt.date() - hoje.date()).days
+                
+                if dias_faltam == 0:
+                    dia_texto = "*HOJE*"
+                elif dias_faltam == 1:
+                    dia_texto = "*AMANHÃ*"
+                else:
+                    dia_texto = dt.strftime('%A').upper()
+                
+                response += f"\n━━━ {dia_texto} - {c['data']} ━━━\n\n"
+            
+            # Ícone da fonte
+            icone = "🌐" if c['fonte'] == 'google' else "📍"
+            
+            # Informações do compromisso
+            response += f"{idx}. {icone} *{c['hora']}* - {c['titulo']}\n"
+            
+            if c.get('descricao'):
+                response += f"   📝 {c['descricao'][:50]}\n"
+            
+            # Tempo restante
+            minutos = int((dt - hoje).total_seconds() / 60)
+            if minutos <= 60:
+                response += f"   ⏰ *Em {minutos} minutos!*\n"
+            elif minutos <= 1440:  # 24 horas
+                horas = minutos // 60
+                response += f"   ⏰ Em {horas} hora(s)\n"
+            else:
+                dias = minutos // 1440
+                response += f"   📅 Em {dias} dia(s)\n"
+            
+            response += "\n"
+        
+        if len(compromissos) > 15:
+            response += f"\n... e mais {len(compromissos) - 15} compromisso(s)\n"
+        
+        response += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        response += f"📊 Total: {len(compromissos)} compromisso(s)\n"
+        response += "⏰ Alarmes criados automaticamente!"
+        
         return response
     
     def _get_lembretes(self, user_id: str) -> str:
@@ -648,14 +926,14 @@ Você ainda pode usar:
     
     async def _cancelar_item(self, user_id: str, item_id: str) -> str:
         for i, evento in enumerate(self.eventos):
-            if evento.get('id') == item_id and evento.get('user_id') == user_id:
+            if evento.get('id', '').startswith(item_id) and evento.get('user_id') == user_id:
                 titulo = evento.get('titulo', '')[:50]
                 google_id = evento.get('google_event_id')
                 if google_id and self.is_google_connected(user_id):
                     await self._delete_google_event(user_id, google_id)
                 self.eventos.pop(i)
                 self._save_data()
-                return f"Evento Cancelado!\n\n{titulo}"
+                return f"✅ *Evento Cancelado!*\n\n❌ {titulo}"
         for i, lembrete in enumerate(self.lembretes):
             if lembrete.get('id') == item_id and lembrete.get('user_id') == user_id:
                 texto = lembrete.get('texto', '')[:50]
@@ -672,4 +950,44 @@ Você ainda pode usar:
         self.lembretes.append(lembrete_dict)
         self._save_data()
         return lembrete.id
+    
+    async def _confirmar_evento(self, user_id: str, event_id: str) -> str:
+        """Confirma presença em um evento"""
+        for evento in self.eventos:
+            if evento.get('id', '').startswith(event_id) and evento.get('user_id') == user_id:
+                evento['confirmado'] = True
+                self._save_data()
+                titulo = evento.get('titulo', 'Evento')
+                hora = evento.get('hora', '')
+                data = evento.get('data', '')
+                if data:
+                    try:
+                        data_fmt = datetime.strptime(data, '%Y-%m-%d').strftime('%d/%m/%Y')
+                    except:
+                        data_fmt = data
+                else:
+                    data_fmt = ''
+                
+                return f"✅ *Presença Confirmada!*\n\n📅 {titulo}\n🕒 {data_fmt} às {hora}\n\n✉️ Notificação enviada!"
+        
+        return f"❌ Evento `{event_id}` não encontrado."
+    
+    async def _alterar_evento(self, user_id: str, event_id: str) -> str:
+        """Inicia processo de alteração de evento"""
+        for evento in self.eventos:
+            if evento.get('id', '').startswith(event_id) and evento.get('user_id') == user_id:
+                titulo = evento.get('titulo', 'Evento')
+                hora = evento.get('hora', '')
+                data = evento.get('data', '')
+                if data:
+                    try:
+                        data_fmt = datetime.strptime(data, '%Y-%m-%d').strftime('%d/%m/%Y')
+                    except:
+                        data_fmt = data
+                else:
+                    data_fmt = ''
+                
+                return f"✏️ *Alterar Evento*\n\n📝 Evento atual:\n📅 {titulo}\n🕒 {data_fmt} às {hora}\n\n💡 *Como alterar:*\n\n1️⃣ Nova data/hora:\n   `reagendar {event_id} amanha as 15h`\n\n2️⃣ Novo título:\n   `renomear {event_id} Reunião com cliente`\n\n3️⃣ Cancelar:\n   `cancelar {event_id}`"
+        
+        return f"❌ Evento `{event_id}` não encontrado."
 

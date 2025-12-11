@@ -18,9 +18,12 @@ class VozModule:
         self.temp_dir = os.path.join(data_dir, "audio_temp")
         os.makedirs(self.temp_dir, exist_ok=True)
         
-        # Configurações do recognizer
-        self.recognizer.energy_threshold = 300
+        # Configurações otimizadas do recognizer
+        self.recognizer.energy_threshold = 200  # Mais sensível
         self.recognizer.dynamic_energy_threshold = True
+        self.recognizer.pause_threshold = 0.8  # Pausa entre palavras
+        self.recognizer.phrase_threshold = 0.3  # Threshold de frase
+        self.recognizer.non_speaking_duration = 0.5  # Duração de não-fala
     
     async def handle(self, command: str, args: list, 
                      user_id: str, attachments: list = None) -> str:
@@ -74,29 +77,50 @@ A transcrição será processada automaticamente.
             
             # Transcreve usando Google Speech Recognition (gratuito)
             with sr.AudioFile(wav_path) as source:
-                # Ajusta para ruído ambiente
-                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                # Ajusta para ruído ambiente (tempo maior para melhor calibração)
+                self.recognizer.adjust_for_ambient_noise(source, duration=1.0)
                 audio_data = self.recognizer.record(source)
             
-            # Tenta transcrever em português
+            # Tenta transcrever em português com opções alternativas
             try:
+                # Primeira tentativa: português do Brasil
                 texto = self.recognizer.recognize_google(
                     audio_data, 
-                    language='pt-BR'
+                    language='pt-BR',
+                    show_all=False  # Apenas melhor resultado
                 )
                 return {
                     'success': True,
-                    'text': texto
+                    'text': texto,
+                    'confidence': 'alta'
                 }
             except sr.UnknownValueError:
+                # Segunda tentativa: com show_all para pegar alternativas
+                try:
+                    resultado_completo = self.recognizer.recognize_google(
+                        audio_data, 
+                        language='pt-BR',
+                        show_all=True
+                    )
+                    if resultado_completo and 'alternative' in resultado_completo:
+                        melhor_alternativa = resultado_completo['alternative'][0]
+                        if 'transcript' in melhor_alternativa:
+                            return {
+                                'success': True,
+                                'text': melhor_alternativa['transcript'],
+                                'confidence': 'baixa'
+                            }
+                except:
+                    pass
+                
                 return {
                     'success': False,
-                    'error': 'Não consegui entender o áudio. Tente falar mais claramente.'
+                    'error': '🎤 Não consegui entender o áudio.\n\n💡 *Dicas:*\n• Fale mais devagar e claramente\n• Reduza ruído de fundo\n• Aproxime-se do microfone'
                 }
             except sr.RequestError as e:
                 return {
                     'success': False,
-                    'error': f'Erro no serviço de reconhecimento: {str(e)}'
+                    'error': f'❌ Erro no serviço de reconhecimento.\n\n🔧 Detalhes técnicos: {str(e)}'
                 }
                 
         except Exception as e:
@@ -128,8 +152,15 @@ A transcrição será processada automaticamente.
                 audio = AudioSegment.from_file(audio_path)
             
             # Converte para mono e 16kHz (melhor para speech recognition)
-            audio = audio.set_channels(1)
-            audio = audio.set_frame_rate(16000)
+            audio = audio.set_channels(1)  # Mono
+            audio = audio.set_frame_rate(16000)  # 16kHz
+            audio = audio.set_sample_width(2)  # 16-bit
+            
+            # Normaliza volume (melhora reconhecimento)
+            audio = audio.normalize()
+            
+            # Remove silêncio do início e fim
+            audio = audio.strip_silence(silence_thresh=-50, padding=100)
             
             # Salva como WAV
             wav_path = os.path.join(
@@ -147,11 +178,15 @@ A transcrição será processada automaticamente.
     def formatar_resposta_transcricao(self, resultado: dict) -> str:
         """Formata a resposta da transcrição"""
         if resultado['success']:
+            confianca = resultado.get('confidence', 'alta')
+            icon_confianca = "🟢" if confianca == 'alta' else "🟡"
+            
             return f"""
 🎤 *Transcrição do Áudio:*
 
 "{resultado['text']}"
 
+{icon_confianca} Confiança: {confianca}
 _Processando comando..._
 """
         else:
@@ -160,8 +195,10 @@ _Processando comando..._
 
 {resultado['error']}
 
-💡 Dicas:
-• Fale claramente e perto do microfone
-• Evite ambientes com muito ruído
-• Tente enviar um áudio mais curto
+💡 *Sugestões para melhorar:*
+• 🗣️ Fale claramente e pausadamente
+• 🔇 Reduza ruído de fundo
+• 📱 Aproxime o celular da boca
+• ⏱️ Envie áudios de 3-30 segundos
+• 🔊 Aumente o volume da gravação
 """

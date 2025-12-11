@@ -553,29 +553,33 @@ class ExtratorDocumentosBrasil:
     # ==================== FUNÇÕES AUXILIARES ====================
     
     def _extrair_valor(self, texto: str) -> float:
-        """Extrai valor monetário do texto"""
-        # Padrões: R$ 1.234,56 ou R$1234.56 ou 1.234,56
+        """Extrai valor monetário do texto (última ocorrência)"""
+        # Padrões para extração de valores
         padroes = [
-            r'R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})',  # R$ 1.234,56
-            r'R\$\s*(\d+,\d{2})',                    # R$ 123,45
-            r'valor[:\s]+R?\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2})',
-            r'total[:\s]+R?\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2})',
+            r'R\$\s*([\d.,]+)',
+            r'Valor:?\s*R?\$?\s*([\d.,]+)',
+            r'VALOR:?\s*R?\$?\s*([\d.,]+)',
+            r'Total:?\s*R?\$?\s*([\d.,]+)',
+            r'TOTAL:?\s*R?\$?\s*([\d.,]+)',
+            r'(\d{1,3}(?:\.\d{3})*,\d{2})',  # Formato brasileiro: 1.234,56
         ]
         
         for padrao in padroes:
-            match = re.search(padrao, texto, re.IGNORECASE)
-            if match:
-                valor_str = match.group(1)
+            matches = re.findall(padrao, texto, re.IGNORECASE)
+            if matches:
+                valor_str = matches[-1]  # Última ocorrência
+                # Converte formato brasileiro para float
                 valor_str = valor_str.replace('.', '').replace(',', '.')
                 try:
-                    return float(valor_str)
+                    valor = float(valor_str)
+                    if 0.01 <= valor <= 1000000:  # Valores razoáveis
+                        return valor
                 except:
-                    pass
-        
+                    continue
         return 0.0
     
     def _extrair_data_vencimento(self, texto: str) -> str:
-        """Extrai data de vencimento"""
+        """Extrai data de vencimento (última ocorrência)"""
         padroes = [
             r'vencimento[:\s]+(\d{2}/\d{2}/\d{4})',
             r'venc[:\s]+(\d{2}/\d{2}/\d{4})',
@@ -583,14 +587,14 @@ class ExtratorDocumentosBrasil:
         ]
         
         for padrao in padroes:
-            match = re.search(padrao, texto, re.IGNORECASE)
-            if match:
-                return match.group(1)
+            matches = re.findall(padrao, texto, re.IGNORECASE)
+            if matches:
+                return matches[-1]  # Última ocorrência
         
         return ""
     
     def _extrair_data_hora(self, texto: str) -> str:
-        """Extrai data e hora"""
+        """Extrai data e hora (última ocorrência)"""
         padroes = [
             r'(\d{2}/\d{2}/\d{4})\s+[àa]?s?\s*(\d{2}:\d{2}(?::\d{2})?)',
             r'(\d{2}/\d{2}/\d{4})\s*-?\s*(\d{2}:\d{2})',
@@ -598,16 +602,17 @@ class ExtratorDocumentosBrasil:
         ]
         
         for padrao in padroes:
-            match = re.search(padrao, texto, re.IGNORECASE)
-            if match:
-                if len(match.groups()) >= 2:
-                    return f"{match.group(1)} {match.group(2)}"
-                return match.group(1)
+            matches = re.findall(padrao, texto, re.IGNORECASE)
+            if matches:
+                last_match = matches[-1]
+                if len(last_match) >= 2 and last_match[1]:
+                    return f"{last_match[0]} {last_match[1]}"
+                return last_match[0]
         
         return ""
     
     def _extrair_beneficiario(self, texto: str) -> str:
-        """Extrai nome do beneficiário"""
+        """Extrai nome do beneficiário (última ocorrência)"""
         padroes = [
             r'benefici[aá]rio[:\s]+([A-Za-zÀ-ÿ\s]+)',
             r'favorecido[:\s]+([A-Za-zÀ-ÿ\s]+)',
@@ -615,9 +620,9 @@ class ExtratorDocumentosBrasil:
         ]
         
         for padrao in padroes:
-            match = re.search(padrao, texto, re.IGNORECASE)
-            if match:
-                nome = match.group(1).strip()
+            matches = re.findall(padrao, texto, re.IGNORECASE)
+            if matches:
+                nome = matches[-1].strip()
                 # Limita a 50 caracteres e remove lixo
                 nome = nome[:50].split('\n')[0]
                 return nome
@@ -625,75 +630,86 @@ class ExtratorDocumentosBrasil:
         return ""
     
     def _extrair_pagador(self, texto: str) -> str:
-        """Extrai nome do pagador"""
+        """Extrai nome do pagador (última ocorrência)"""
         padroes = [
             r'pagador[:\s]+([A-Za-zÀ-ÿ\s]+)',
             r'sacado[:\s]+([A-Za-zÀ-ÿ\s]+)',
         ]
         
         for padrao in padroes:
-            match = re.search(padrao, texto, re.IGNORECASE)
-            if match:
-                nome = match.group(1).strip()[:50].split('\n')[0]
+            matches = re.findall(padrao, texto, re.IGNORECASE)
+            if matches:
+                nome = matches[-1].strip()[:50].split('\n')[0]
                 return nome
         
         return ""
     
     def _extrair_cpf(self, texto: str) -> str:
-        """Extrai e valida CPF"""
+        """Extrai e valida CPF (última ocorrência válida)"""
         padrao = r'\d{3}[\.\s]?\d{3}[\.\s]?\d{3}[\-\s]?\d{2}'
         matches = re.findall(padrao, texto)
         
+        valid_cpfs = []
         for match in matches:
             cpf = re.sub(r'\D', '', match)
             if len(cpf) == 11:
                 if self._cpf_validator:
                     if self._cpf_validator.validate(cpf):
-                        return self._cpf_validator.mask(cpf)
+                        valid_cpfs.append(self._cpf_validator.mask(cpf))
                 else:
-                    return f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:11]}"
+                    valid_cpfs.append(f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:11]}")
         
-        return ""
+        return valid_cpfs[-1] if valid_cpfs else ""
     
     def _extrair_cnpj(self, texto: str) -> str:
-        """Extrai e valida CNPJ"""
+        """Extrai e valida CNPJ (última ocorrência válida)"""
         padrao = r'\d{2}[\.\s]?\d{3}[\.\s]?\d{3}[/\s]?\d{4}[\-\s]?\d{2}'
         matches = re.findall(padrao, texto)
         
+        valid_cnpjs = []
         for match in matches:
             cnpj = re.sub(r'\D', '', match)
             if len(cnpj) == 14:
                 if self._cnpj_validator:
                     if self._cnpj_validator.validate(cnpj):
-                        return self._cnpj_validator.mask(cnpj)
+                        valid_cnpjs.append(self._cnpj_validator.mask(cnpj))
                 else:
-                    return f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:14]}"
+                    valid_cnpjs.append(f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:14]}")
         
-        return ""
+        return valid_cnpjs[-1] if valid_cnpjs else ""
     
     def _extrair_chave_pix(self, texto: str) -> Tuple[str, str]:
-        """Extrai chave PIX e identifica tipo"""
+        """Extrai chave PIX e identifica tipo (última ocorrência)"""
         texto_clean = texto.replace('\n', ' ')
         
-        # Email
-        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', texto_clean)
-        if email_match:
-            return email_match.group(), 'email'
+        # Coletar todas as chaves encontradas
+        chaves = []
         
-        # Telefone
-        tel_match = re.search(r'\+?55?\s*\(?\d{2}\)?\s*9?\d{4}[\-\s]?\d{4}', texto_clean)
-        if tel_match:
-            return tel_match.group(), 'telefone'
+        # Chave aleatória (32 caracteres) - procurar todas
+        chave_matches = re.findall(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', texto_clean, re.IGNORECASE)
+        for chave in chave_matches:
+            chaves.append((chave, 'aleatoria'))
         
-        # Chave aleatória (32 caracteres)
-        chave_match = re.search(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', texto_clean, re.IGNORECASE)
-        if chave_match:
-            return chave_match.group(), 'aleatoria'
+        # Telefone - procurar todas
+        tel_matches = re.findall(r'\+?55?\s*\(?\d{2}\)?\s*9?\d{4}[\-\s]?\d{4}', texto_clean)
+        for tel in tel_matches:
+            chaves.append((tel, 'telefone'))
         
-        # CPF como chave
+        # Email - procurar todas
+        email_matches = re.findall(r'[\w\.-]+@[\w\.-]+\.\w+', texto_clean)
+        for email in email_matches:
+            chaves.append((email, 'email'))
+        
+        # CPF como chave - usar o último CPF extraído
         cpf = self._extrair_cpf(texto)
         if cpf:
-            return cpf, 'cpf'
+            chaves.append((cpf, 'cpf'))
+        
+        # Retornar a última chave encontrada
+        if chaves:
+            return chaves[-1]
+        
+        return "", ""
         
         # CNPJ como chave
         cnpj = self._extrair_cnpj(texto)
@@ -703,7 +719,7 @@ class ExtratorDocumentosBrasil:
         return "", ""
     
     def _extrair_id_transacao(self, texto: str) -> str:
-        """Extrai ID da transação"""
+        """Extrai ID da transação (última ocorrência)"""
         padroes = [
             r'id[:\s]+([A-Za-z0-9]+)',
             r'c[óo]digo[:\s]+([A-Za-z0-9]+)',
@@ -712,16 +728,15 @@ class ExtratorDocumentosBrasil:
         ]
         
         for padrao in padroes:
-            match = re.search(padrao, texto, re.IGNORECASE)
-            if match:
-                id_trans = match.group(1)
+            matches = re.findall(padrao, texto, re.IGNORECASE)
+            for id_trans in reversed(matches):  # Última primeiro
                 if len(id_trans) >= 10:
                     return id_trans
         
         return ""
     
     def _extrair_nomes_transacao(self, texto: str) -> Dict[str, str]:
-        """Extrai nomes de origem e destino"""
+        """Extrai nomes de origem e destino (últimas ocorrências)"""
         nomes = {}
         
         # Origem
@@ -732,12 +747,11 @@ class ExtratorDocumentosBrasil:
         ]
         
         for padrao in padroes_origem:
-            match = re.search(padrao, texto, re.IGNORECASE)
-            if match:
-                nome = match.group(1).strip()[:40].split('\n')[0]
+            matches = re.findall(padrao, texto, re.IGNORECASE)
+            if matches:
+                nome = matches[-1].strip()[:40].split('\n')[0]
                 if len(nome) > 3:
                     nomes['origem'] = nome
-                    break
         
         # Destino
         padroes_destino = [
@@ -748,12 +762,11 @@ class ExtratorDocumentosBrasil:
         ]
         
         for padrao in padroes_destino:
-            match = re.search(padrao, texto, re.IGNORECASE)
-            if match:
-                nome = match.group(1).strip()[:40].split('\n')[0]
+            matches = re.findall(padrao, texto, re.IGNORECASE)
+            if matches:
+                nome = matches[-1].strip()[:40].split('\n')[0]
                 if len(nome) > 3:
                     nomes['destino'] = nome
-                    break
         
         return nomes
     
@@ -777,18 +790,18 @@ class ExtratorDocumentosBrasil:
         return bancos_encontrados
     
     def _extrair_agencia_conta(self, texto: str) -> Dict[str, str]:
-        """Extrai agência e conta"""
+        """Extrai agência e conta (últimas ocorrências)"""
         resultado = {}
         
         # Agência
-        ag_match = re.search(r'ag[êe]?ncia[:\s]+(\d{4})', texto, re.IGNORECASE)
-        if ag_match:
-            resultado['agencia'] = ag_match.group(1)
+        ag_matches = re.findall(r'ag[êe]?ncia[:\s]+(\d{4})', texto, re.IGNORECASE)
+        if ag_matches:
+            resultado['agencia'] = ag_matches[-1]
         
         # Conta
-        conta_match = re.search(r'conta[:\s]+(\d{5,12}[\-]?\d?)', texto, re.IGNORECASE)
-        if conta_match:
-            resultado['conta'] = conta_match.group(1)
+        conta_matches = re.findall(r'conta[:\s]+(\d{5,12}[\-]?\d?)', texto, re.IGNORECASE)
+        if conta_matches:
+            resultado['conta'] = conta_matches[-1]
         
         return resultado
     

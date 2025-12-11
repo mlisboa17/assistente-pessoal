@@ -153,6 +153,10 @@ async function connectToWhatsApp() {
                 if (msg.message?.audioMessage) {
                     console.log(`🎤 ${userName}: [ÁUDIO RECEBIDO]`);
                     await sock.sendMessage(from, { text: '🎤 Transcrevendo seu áudio...' });
+                    
+                    // Aguarda 1 segundo para processar áudio
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
                     const response = await processAudio(msg, from, userName);
                     await sendWithButtons(sock, from, response);
                     console.log(`📤 Resposta enviada!`);
@@ -163,8 +167,73 @@ async function connectToWhatsApp() {
                 if (msg.message?.documentMessage) {
                     const filename = msg.message.documentMessage.fileName || 'arquivo';
                     const mimetype = msg.message.documentMessage.mimetype || '';
-                    console.log(`📄 ${userName}: [ARQUIVO: ${filename}]`);
-                    await sock.sendMessage(from, { text: `📄 Processando arquivo: ${filename}...` });
+                    const caption = msg.message.documentMessage.caption || '';
+                    const isPDF = mimetype.toLowerCase().includes('pdf') || filename.toLowerCase().endsWith('.pdf');
+                    
+                    console.log(`📄 ${userName}: [ARQUIVO: ${filename}] Caption: "${caption}"`);
+                    
+                    // DETECTAR SE É EXTRATO OU TARIFAS
+                    const captionLower = caption.toLowerCase();
+                    const isExtrato = captionLower.includes('extrato') || 
+                                      captionLower.includes('bancário') || 
+                                      captionLower.includes('bancario') ||
+                                      captionLower.includes('banco') ||
+                                      captionLower.includes('bb') ||
+                                      captionLower.includes('bradesco') ||
+                                      captionLower.includes('itau') ||
+                                      captionLower.includes('santander') ||
+                                      captionLower.includes('caixa') ||
+                                      captionLower.includes('c6');
+                    
+                    const isTarifas = captionLower.includes('tarifa') || 
+                                      captionLower.includes('taxa') ||
+                                      captionLower.includes('tarifas');
+                    
+                    // Extrair senha se fornecida
+                    const senhaMatch = caption.match(/senha[:\s]*(\S+)/i);
+                    const senha = senhaMatch ? senhaMatch[1] : null;
+                    
+                    // PROCESSAR EXTRATO BANCÁRIO
+                    if (isExtrato && isPDF) {
+                        await sock.sendMessage(from, { text: `🏦 Processando extrato bancário...\n📄 ${filename}` });
+                        await sock.readMessages([msg.key]);
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        
+                        const response = await processExtrato(msg, from, userName, senha);
+                        await sendWithButtons(sock, from, response);
+                        console.log(`📤 Extrato processado!`);
+                        continue;
+                    }
+                    
+                    // PROCESSAR TARIFAS
+                    if (isTarifas && isPDF) {
+                        await sock.sendMessage(from, { text: `💳 Analisando tarifas...\n📄 ${filename}` });
+                        await sock.readMessages([msg.key]);
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        
+                        const response = await processTarifas(msg, from, userName, senha);
+                        await sendWithButtons(sock, from, response);
+                        console.log(`📤 Tarifas analisadas!`);
+                        continue;
+                    }
+                    
+                    // PROCESSAR ARQUIVO NORMAL
+                    await sock.sendMessage(from, { text: `📄 Processando arquivo: ${filename}...${isPDF ? '\n⏳ Preparando download...' : ''}` });
+                    
+                    if (isPDF) {
+                        try {
+                            console.log('🖱️ Clicando no arquivo PDF para iniciar download...');
+                            await sock.readMessages([msg.key]);
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            console.log('✅ Arquivo preparado para download');
+                        } catch (clickError) {
+                            console.log('⚠️ Erro ao simular clique, continuando com download:', clickError.message);
+                        }
+                    }
+                    
+                    const waitTime = isPDF ? 3000 : 1000;
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    
                     const response = await processFile(msg, from, userName);
                     await sendWithButtons(sock, from, response);
                     console.log(`📤 Resposta enviada!`);
@@ -176,6 +245,10 @@ async function connectToWhatsApp() {
                     const caption = msg.message.imageMessage.caption || '';
                     console.log(`🖼️ ${userName}: [IMAGEM] ${caption}`);
                     await sock.sendMessage(from, { text: '🧾 Analisando comprovante...' });
+                    
+                    // Aguarda 1 segundo para processar imagem
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
                     // Processa como possível comprovante
                     const response = await processImage(msg, from, userName);
                     await sendWithButtons(sock, from, response);
@@ -240,23 +313,58 @@ async function connectToWhatsApp() {
                 await sendWithButtons(sock, from, '❌ Desculpe, ocorreu um erro ao processar sua mensagem.');
             }
         /**
-         * Envia mensagem com botões usando template (ButtonMessage)
-         * Este é o formato que realmente funciona no WhatsApp Web
+         * Envia mensagem com botões interativos
+         * Suporta botões de resposta rápida e listas interativas
          */
         async function sendWithButtons(sock, to, text) {
             try {
                 const lower = text.toLowerCase();
                 
-                // Menu principal
+                // Menu principal com lista interativa
                 if (lower.includes('menu principal') || lower.includes('comandos disponíveis') || lower.includes('olá! sou o moga bot')) {
+                    const sections = [
+                        {
+                            title: '📱 Principais Funções',
+                            rows: [
+                                { rowId: 'agenda', title: '📅 Agenda', description: 'Ver e criar compromissos' },
+                                { rowId: 'tarefas', title: '✅ Tarefas', description: 'Gerenciar lista de tarefas' },
+                                { rowId: 'financas', title: '💰 Finanças', description: 'Controle de gastos' },
+                                { rowId: 'emails', title: '📧 E-mails', description: 'Verificar e-mails' }
+                            ]
+                        },
+                        {
+                            title: '⚙️ Outras Opções',
+                            rows: [
+                                { rowId: 'ajuda', title: '❓ Ajuda', description: 'Ver todos os comandos' },
+                                { rowId: 'status', title: '📊 Status', description: 'Ver status do sistema' }
+                            ]
+                        }
+                    ];
+                    
+                    const listMessage = {
+                        text: text,
+                        footer: '🤖 Escolha uma opção abaixo',
+                        title: '✨ Menu Principal',
+                        buttonText: 'Ver Opções',
+                        sections
+                    };
+                    
+                    await sock.sendMessage(to, listMessage);
+                    return;
+                }
+
+                // Agenda com opções de ação
+                if (lower.includes('📅 agenda') || (lower.includes('compromisso') && lower.includes('opções'))) {
+                    const buttons = [
+                        { buttonId: 'criar_evento', buttonText: { displayText: '➕ Novo Evento' }, type: 1 },
+                        { buttonId: 'ver_agenda', buttonText: { displayText: '📋 Ver Agenda' }, type: 1 },
+                        { buttonId: 'proximos', buttonText: { displayText: '⏰ Próximos' }, type: 1 }
+                    ];
+                    
                     await sock.sendMessage(to, {
                         text: text,
-                        buttons: [
-                            { buttonId: 'agenda', buttonText: { displayText: '📅 Agenda' }, type: 1 },
-                            { buttonId: 'tarefas', buttonText: { displayText: '✅ Tarefas' }, type: 1 },
-                            { buttonId: 'gastos', buttonText: { displayText: '💰 Finanças' }, type: 1 },
-                            { buttonId: 'ajuda', buttonText: { displayText: '❓ Ajuda' }, type: 1 }
-                        ],
+                        footer: '🤖 Escolha uma ação',
+                        buttons: buttons,
                         headerType: 1
                     });
                     return;
@@ -271,40 +379,87 @@ async function connectToWhatsApp() {
 
                 // Confirmação Sim/Não
                 if (lower.includes('tem certeza') || lower.includes('confirmar') || lower.includes('deseja') || lower.includes('confirme')) {
+                    const buttons = [
+                        { buttonId: 'sim', buttonText: { displayText: '✅ Sim' }, type: 1 },
+                        { buttonId: 'nao', buttonText: { displayText: '❌ Não' }, type: 1 }
+                    ];
+                    
                     await sock.sendMessage(to, {
                         text: text,
-                        buttons: [
-                            { buttonId: 'sim', buttonText: { displayText: '✅ Sim' }, type: 1 },
-                            { buttonId: 'nao', buttonText: { displayText: '❌ Não' }, type: 1 }
-                        ],
+                        footer: '🤖 Confirme sua escolha',
+                        buttons: buttons,
                         headerType: 1
                     });
                     return;
                 }
 
-                // Tarefas
-                if (lower.includes('tarefas') && (lower.includes('criar') || lower.includes('nova') || lower.includes('adicionar'))) {
+                // Tarefas com lista interativa
+                if (lower.includes('tarefas') && (lower.includes('gerenciar') || lower.includes('lista'))) {
+                    const sections = [
+                        {
+                            title: '✅ Gerenciar Tarefas',
+                            rows: [
+                                { rowId: 'nova_tarefa', title: '➕ Nova Tarefa', description: 'Criar nova tarefa' },
+                                { rowId: 'listar_tarefas', title: '📋 Listar Tarefas', description: 'Ver todas as tarefas' },
+                                { rowId: 'concluir_tarefa', title: '✔️ Concluir', description: 'Marcar tarefa como concluída' },
+                                { rowId: 'excluir_tarefa', title: '🗑️ Excluir', description: 'Remover tarefa' }
+                            ]
+                        }
+                    ];
+                    
                     await sock.sendMessage(to, {
                         text: text,
-                        buttons: [
-                            { buttonId: 'nova_tarefa', buttonText: { displayText: '✨ Nova Tarefa' }, type: 1 },
-                            { buttonId: 'concluir_tarefa', buttonText: { displayText: '✅ Concluir' }, type: 1 },
-                            { buttonId: 'listar_tarefas', buttonText: { displayText: '📋 Listar' }, type: 1 }
-                        ],
-                        headerType: 1
+                        footer: '🤖 Escolha uma ação',
+                        title: '✅ Tarefas',
+                        buttonText: 'Ver Opções',
+                        sections
                     });
                     return;
                 }
 
-                // Finanças
+                // Finanças com lista interativa
                 if (lower.includes('finanças') || lower.includes('gastos') || lower.includes('despesa')) {
+                    const sections = [
+                        {
+                            title: '💰 Controle Financeiro',
+                            rows: [
+                                { rowId: 'adicionar_gasto', title: '➕ Adicionar Gasto', description: 'Registrar nova despesa' },
+                                { rowId: 'ver_gastos', title: '📊 Ver Gastos', description: 'Listar gastos do mês' },
+                                { rowId: 'relatorio', title: '📈 Relatório', description: 'Relatório detalhado' },
+                                { rowId: 'categorias', title: '🏷️ Categorias', description: 'Ver gastos por categoria' }
+                            ]
+                        },
+                        {
+                            title: '💵 Entradas',
+                            rows: [
+                                { rowId: 'adicionar_entrada', title: '💸 Nova Entrada', description: 'Registrar receita' },
+                                { rowId: 'saldo', title: '💰 Saldo', description: 'Ver saldo atual' }
+                            ]
+                        }
+                    ];
+                    
                     await sock.sendMessage(to, {
                         text: text,
-                        buttons: [
-                            { buttonId: 'adicionar_gasto', buttonText: { displayText: '➕ Adicionar' }, type: 1 },
-                            { buttonId: 'ver_gastos', buttonText: { displayText: '📊 Ver' }, type: 1 },
-                            { buttonId: 'relatorio', buttonText: { displayText: '📈 Relatório' }, type: 1 }
-                        ],
+                        footer: '🤖 Escolha uma opção',
+                        title: '💰 Finanças',
+                        buttonText: 'Ver Opções',
+                        sections
+                    });
+                    return;
+                }
+
+                // E-mails
+                if (lower.includes('e-mail') || lower.includes('email') || lower.includes('inbox')) {
+                    const buttons = [
+                        { buttonId: 'ler_emails', buttonText: { displayText: '📬 Ler E-mails' }, type: 1 },
+                        { buttonId: 'buscar_email', buttonText: { displayText: '🔍 Buscar' }, type: 1 },
+                        { buttonId: 'nao_lidos', buttonText: { displayText: '🔔 Não Lidos' }, type: 1 }
+                    ];
+                    
+                    await sock.sendMessage(to, {
+                        text: text,
+                        footer: '🤖 O que deseja fazer?',
+                        buttons: buttons,
                         headerType: 1
                     });
                     return;
@@ -313,7 +468,7 @@ async function connectToWhatsApp() {
                 // Padrão: só texto
                 await sock.sendMessage(to, { text });
             } catch (err) {
-                console.error('❌ Erro ao enviar mensagem:', err);
+                console.error('❌ Erro ao enviar mensagem com botões:', err);
                 // Fallback para texto simples
                 try {
                     await sock.sendMessage(to, { text });
@@ -369,11 +524,22 @@ async function processMessage(text, userId, userName, isGroup = false, groupName
 
 /**
  * Processa áudio - Baixa, envia para API e retorna transcrição + resposta
+ * Agora com timeout e verificação de download completo
  */
 async function processAudio(msg, userId, userName) {
     try {
-        // Baixa o áudio
-        const buffer = await downloadMediaMessage(msg, 'buffer', {});
+        // Baixa o áudio com timeout
+        let buffer;
+        try {
+            buffer = await Promise.race([
+                downloadMediaMessage(msg, 'buffer', {}),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Timeout no download')), 30000)
+                )
+            ]);
+        } catch (downloadError) {
+            return '⏳ Aguardando o áudio ser processado...\n\nSe o erro persistir, tente novamente em alguns segundos.';
+        }
         
         if (!buffer || buffer.length === 0) {
             return '❌ Não consegui baixar o áudio. Tente novamente.';
@@ -400,30 +566,74 @@ async function processAudio(msg, userId, userName) {
             return '❌ Servidor Python não está rodando.\n\nInicie com: `python api_server.py`';
         }
         console.error('Erro ao processar áudio:', error.message);
-        return `❌ Erro ao processar áudio: ${error.message}`;
+        return `❌ Erro ao processar áudio. Tente novamente.`;
     }
 }
 
 /**
  * Processa arquivo (PDF) - Baixa, envia para API
+ * Agora com clique simulado e melhor tratamento de download
  */
 async function processFile(msg, userId, userName) {
     try {
-        // Baixa o arquivo
-        const buffer = await downloadMediaMessage(msg, 'buffer', {});
-        
-        if (!buffer || buffer.length === 0) {
-            return '❌ Não consegui baixar o arquivo. Tente novamente.';
-        }
-
         const filename = msg.message.documentMessage.fileName || 'arquivo';
         const mimetype = msg.message.documentMessage.mimetype || '';
+        const isPDF = mimetype.toLowerCase().includes('pdf') || filename.toLowerCase().endsWith('.pdf');
+        
+        console.log(`📂 Iniciando download do arquivo: ${filename}`);
+        
+        // Baixa o arquivo com timeout e retry
+        let buffer;
+        let tentativas = 0;
+        const max_tentativas = 3;
+        const downloadTimeout = isPDF ? 90000 : 45000; // 90s para PDF, 45s outros
+        
+        while (tentativas < max_tentativas) {
+            try {
+                console.log(`⬇️ Tentativa ${tentativas + 1} de download...`);
+                
+                buffer = await Promise.race([
+                    downloadMediaMessage(msg, 'buffer', {}),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Timeout no download')), downloadTimeout)
+                    )
+                ]);
+                
+                if (buffer && buffer.length > 0) {
+                    console.log(`✅ Download concluído: ${(buffer.length / 1024).toFixed(2)} KB`);
+                    break;
+                }
+                
+                tentativas++;
+                console.log(`⚠️ Buffer vazio na tentativa ${tentativas}`);
+                
+            } catch (err) {
+                tentativas++;
+                console.error(`❌ Erro na tentativa ${tentativas}:`, err.message);
+                
+                if (tentativas >= max_tentativas) {
+                    return `⏳ *Não consegui baixar o arquivo após ${max_tentativas} tentativas*\n\n📌 *Possíveis soluções:*\n\n1. Aguarde 10 segundos\n2. Clique no arquivo para abrir/visualizar\n3. Reenvie o arquivo\n\n💡 Arquivos muito grandes podem demorar mais para processar.`;
+                }
+                
+                // Aguarda progressivamente mais tempo entre tentativas
+                const waitTime = tentativas * 2000; // 2s, 4s, 6s
+                console.log(`⏱️ Aguardando ${waitTime/1000}s antes da próxima tentativa...`);
+                await new Promise(r => setTimeout(r, waitTime));
+            }
+        }
+        
+        if (!buffer || buffer.length === 0) {
+            return '❌ Arquivo vazio ou corrompido. Tente reenviar.';
+        }
+
         const caption = msg.message.documentMessage.caption || '';
 
         // Converte para base64
         const fileBase64 = buffer.toString('base64');
+        console.log(`📦 Arquivo baixado: ${(buffer.length / 1024).toFixed(2)} KB`);
 
-        // Envia para o servidor Python
+        // Envia para o servidor Python com timeout maior para PDFs
+        const axiosTimeout = isPDF ? 120000 : 60000;
         const response = await axios.post(`${PYTHON_SERVER}/process-file`, {
             file: fileBase64,
             filename: filename,
@@ -432,7 +642,9 @@ async function processFile(msg, userId, userName) {
             user_id: userId,
             user_name: userName
         }, {
-            timeout: 60000
+            timeout: axiosTimeout,
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity
         });
 
         return response.data.response || '❌ Erro ao processar arquivo.';
@@ -441,21 +653,186 @@ async function processFile(msg, userId, userName) {
         if (error.code === 'ECONNREFUSED') {
             return '❌ Servidor Python não está rodando.\n\nInicie com: `python api_server.py`';
         }
+        if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+            return '⏰ Tempo limite excedido ao processar arquivo.\n\nO arquivo pode ser muito grande ou complexo.\nTente enviar um arquivo menor.';
+        }
         console.error('Erro ao processar arquivo:', error.message);
-        return `❌ Erro ao processar arquivo: ${error.message}`;
+        return `❌ Erro ao processar arquivo: ${error.message}\n\nTente enviar novamente.`;
+    }
+}
+
+/**
+ * Processa EXTRATO BANCÁRIO - Sistema Zero
+ */
+async function processExtrato(msg, userId, userName, senha = null) {
+    try {
+        const filename = msg.message.documentMessage.fileName || 'extrato.pdf';
+        const mimetype = msg.message.documentMessage.mimetype || 'application/pdf';
+        
+        console.log(`🏦 Processando EXTRATO: ${filename} (senha: ${senha ? 'SIM' : 'NÃO'})`);
+        
+        // Baixa o PDF com timeout maior (90 segundos)
+        let buffer;
+        let tentativas = 0;
+        const max_tentativas = 3;
+        
+        while (tentativas < max_tentativas) {
+            try {
+                console.log(`⬇️ Tentativa ${tentativas + 1} de download do extrato...`);
+                
+                buffer = await Promise.race([
+                    downloadMediaMessage(msg, 'buffer', {}),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Timeout no download')), 90000)
+                    )
+                ]);
+                
+                if (buffer && buffer.length > 0) {
+                    console.log(`✅ Extrato baixado: ${(buffer.length / 1024).toFixed(2)} KB`);
+                    break;
+                }
+                
+                tentativas++;
+            } catch (err) {
+                tentativas++;
+                if (tentativas >= max_tentativas) {
+                    return `⏳ *Não consegui baixar o extrato após ${max_tentativas} tentativas*\n\nAguarde e tente reenviar.`;
+                }
+                await new Promise(r => setTimeout(r, tentativas * 2000));
+            }
+        }
+        
+        if (!buffer || buffer.length === 0) {
+            return '❌ Extrato vazio ou corrompido. Tente reenviar.';
+        }
+
+        // Converte para base64
+        const fileBase64 = buffer.toString('base64');
+
+        // Envia para endpoint de extrato
+        const response = await axios.post(`${PYTHON_SERVER}/process-extrato`, {
+            file: fileBase64,
+            filename: filename,
+            senha: senha,
+            user_id: userId,
+            user_name: userName
+        }, {
+            timeout: 120000, // 2 minutos
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        console.log(`✅ Extrato processado com sucesso!`);
+        return response.data.response || '✅ Extrato processado!';
+
+    } catch (error) {
+        console.error('❌ Erro ao processar extrato:', error.message);
+        if (error.response) {
+            console.error('Resposta do servidor:', error.response.data);
+            return `❌ Erro no servidor: ${error.response.data.error || error.message}`;
+        }
+        return `❌ Erro ao processar extrato: ${error.message}\n\nTente enviar novamente.`;
+    }
+}
+
+/**
+ * Processa ANÁLISE DE TARIFAS BANCÁRIAS
+ */
+async function processTarifas(msg, userId, userName, senha = null) {
+    try {
+        const filename = msg.message.documentMessage.fileName || 'tarifas.pdf';
+        const mimetype = msg.message.documentMessage.mimetype || 'application/pdf';
+        
+        console.log(`💳 Analisando TARIFAS: ${filename} (senha: ${senha ? 'SIM' : 'NÃO'})`);
+        
+        // Baixa o PDF com timeout maior (90 segundos)
+        let buffer;
+        let tentativas = 0;
+        const max_tentativas = 3;
+        
+        while (tentativas < max_tentativas) {
+            try {
+                console.log(`⬇️ Tentativa ${tentativas + 1} de download das tarifas...`);
+                
+                buffer = await Promise.race([
+                    downloadMediaMessage(msg, 'buffer', {}),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Timeout no download')), 90000)
+                    )
+                ]);
+                
+                if (buffer && buffer.length > 0) {
+                    console.log(`✅ Arquivo de tarifas baixado: ${(buffer.length / 1024).toFixed(2)} KB`);
+                    break;
+                }
+                
+                tentativas++;
+            } catch (err) {
+                tentativas++;
+                if (tentativas >= max_tentativas) {
+                    return `⏳ *Não consegui baixar o arquivo após ${max_tentativas} tentativas*\n\nAguarde e tente reenviar.`;
+                }
+                await new Promise(r => setTimeout(r, tentativas * 2000));
+            }
+        }
+        
+        if (!buffer || buffer.length === 0) {
+            return '❌ Arquivo vazio ou corrompido. Tente reenviar.';
+        }
+
+        // Converte para base64
+        const fileBase64 = buffer.toString('base64');
+
+        // Envia para endpoint de tarifas
+        const response = await axios.post(`${PYTHON_SERVER}/process-tarifas`, {
+            file: fileBase64,
+            filename: filename,
+            senha: senha,
+            user_id: userId,
+            user_name: userName
+        }, {
+            timeout: 120000, // 2 minutos
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        console.log(`✅ Tarifas analisadas com sucesso!`);
+        return response.data.response || '✅ Tarifas analisadas!';
+
+    } catch (error) {
+        console.error('❌ Erro ao analisar tarifas:', error.message);
+        if (error.response) {
+            console.error('Resposta do servidor:', error.response.data);
+            return `❌ Erro no servidor: ${error.response.data.error || error.message}`;
+        }
+        return `❌ Erro ao analisar tarifas: ${error.message}\n\nTente enviar novamente.`;
     }
 }
 
 /**
  * Processa imagem (comprovantes, PIX, recibos) - Baixa, envia para API
+ * Agora com melhor tratamento de download e delays
  */
 async function processImage(msg, userId, userName) {
     try {
-        // Baixa a imagem
-        const buffer = await downloadMediaMessage(msg, 'buffer', {});
+        // Aguarda 1 segundo para imagem ser processada pelo WhatsApp
+        console.log('⏳ Aguardando 1s para imagem ser processada pelo WhatsApp...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Baixa a imagem com timeout
+        let buffer;
+        try {
+            buffer = await Promise.race([
+                downloadMediaMessage(msg, 'buffer', {}),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Timeout no download')), 40000)
+                )
+            ]);
+        } catch (downloadError) {
+            console.error('Erro no download:', downloadError.message);
+            return '⏳ A imagem ainda está sendo processada pelo WhatsApp.\n\n📌 Por favor, aguarde 5 segundos e reenvie a imagem.';
+        }
         
         if (!buffer || buffer.length === 0) {
-            return '❌ Não consegui baixar a imagem. Tente novamente.';
+            return '❌ Imagem vazia ou corrompida. Tente reenviar.';
         }
 
         const mimetype = msg.message.imageMessage.mimetype || 'image/jpeg';
@@ -463,6 +840,7 @@ async function processImage(msg, userId, userName) {
 
         // Converte para base64
         const imageBase64 = buffer.toString('base64');
+        console.log(`🖼️ Imagem baixada: ${(buffer.length / 1024).toFixed(2)} KB`);
 
         // Envia para o servidor Python (mesmo endpoint de arquivo)
         const response = await axios.post(`${PYTHON_SERVER}/process-file`, {
@@ -473,7 +851,9 @@ async function processImage(msg, userId, userName) {
             user_id: userId,
             user_name: userName
         }, {
-            timeout: 60000
+            timeout: 90000,
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity
         });
 
         return response.data.response || '❌ Erro ao processar imagem.';
@@ -482,8 +862,11 @@ async function processImage(msg, userId, userName) {
         if (error.code === 'ECONNREFUSED') {
             return '❌ Servidor Python não está rodando.\n\nInicie com: `python api_server.py`';
         }
+        if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+            return '⏰ Tempo limite excedido ao processar imagem.\n\nTente enviar uma imagem de menor qualidade.';
+        }
         console.error('Erro ao processar imagem:', error.message);
-        return `❌ Erro ao processar imagem: ${error.message}`;
+        return `❌ Erro ao processar imagem: ${error.message}\n\nTente novamente.`;
     }
 }
 

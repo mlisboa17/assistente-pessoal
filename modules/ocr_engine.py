@@ -122,6 +122,29 @@ class OCREngine:
         
         return texto
     
+    def _texto_tem_encoding_ruim(self, texto: str) -> bool:
+        """
+        Detecta se o texto extraído tem encoding ruim (ex: (cid:0)(cid:1))
+        """
+        if not texto:
+            return True
+        
+        # Verifica se contém muitos caracteres CID (fontes customizadas não extraídas)
+        cid_count = texto.count('(cid:')
+        total_chars = len(texto)
+        
+        # Se mais de 10% do texto são códigos CID, considera ruim
+        if total_chars > 0 and (cid_count / total_chars) > 0.1:
+            return True
+        
+        # Verifica se tem muito pouco texto legível
+        import re
+        texto_limpo = re.sub(r'[^a-zA-Z0-9\s]', '', texto)
+        if len(texto_limpo.strip()) < 20:  # Menos de 20 caracteres alfanuméricos
+            return True
+        
+        return False
+    
     def extrair_texto_pdf(self, pdf_data: bytes) -> str:
         """
         Extrai texto de um PDF
@@ -143,41 +166,53 @@ class OCREngine:
                             page_text = page.extract_text() or ""
                             texto += page_text + "\n"
                     
-                    if texto.strip():
+                    # Verifica se o texto extraído é válido (não está com encoding ruim)
+                    if texto.strip() and not self._texto_tem_encoding_ruim(texto):
+                        print("✅ Texto extraído com pdfplumber")
                         return texto.strip()
+                    else:
+                        print("⚠️ pdfplumber retornou texto com encoding ruim")
+                        texto = ""  # Limpa para tentar próximo método
                 except Exception as e:
                     print(f"pdfplumber falhou: {e}")
             
             # Método 2: PyPDF2
-            if PYPDF2_AVAILABLE:
+            if PYPDF2_AVAILABLE and not texto:
                 try:
                     reader = PdfReader(tmp_path)
                     for page in reader.pages:
                         page_text = page.extract_text() or ""
                         texto += page_text + "\n"
                     
-                    if texto.strip():
+                    if texto.strip() and not self._texto_tem_encoding_ruim(texto):
+                        print("✅ Texto extraído com PyPDF2")
                         return texto.strip()
+                    else:
+                        print("⚠️ PyPDF2 retornou texto com encoding ruim")
+                        texto = ""
                 except Exception as e:
                     print(f"PyPDF2 falhou: {e}")
             
-            # Método 3: Converte PDF para imagem e usa OCR
+            # Método 3: Converte PDF para imagem e usa OCR (sempre tenta se texto anterior falhou)
             if PDF2IMAGE_AVAILABLE:
                 try:
-                    images = pdf2image.convert_from_path(tmp_path)
-                    for img in images:
+                    print("🔄 Convertendo PDF para imagem e aplicando OCR...")
+                    images = pdf2image.convert_from_path(tmp_path, dpi=300)  # Aumenta DPI para melhor OCR
+                    for i, img in enumerate(images):
                         # Converte para bytes
                         img_bytes = io.BytesIO()
-                        img.save(img_bytes, format='JPEG')
+                        img.save(img_bytes, format='JPEG', quality=95)
                         img_bytes.seek(0)
                         
                         page_text = self.extrair_texto_imagem(img_bytes.read())
                         texto += page_text + "\n"
+                        print(f"✅ Página {i+1} processada via OCR")
                     
                     if texto.strip():
+                        print("✅ Texto extraído via OCR")
                         return texto.strip()
                 except Exception as e:
-                    print(f"pdf2image OCR falhou: {e}")
+                    print(f"❌ pdf2image OCR falhou: {e}")
         
         finally:
             try:

@@ -36,6 +36,16 @@ class PerfilUsuario:
     total_mensagens: int = 0
     ultimo_acesso: str = ""
     
+    # 🗣️ Personalização de Linguagem (aprende com o usuário)
+    nivel_formalidade: str = "neutro"  # informal, neutro, formal
+    palavras_frequentes: Dict[str, int] = field(default_factory=dict)
+    emojis_usados: Dict[str, int] = field(default_factory=dict)
+    saudacoes_preferidas: List[str] = field(default_factory=list)
+    confirmacoes_preferidas: List[str] = field(default_factory=list)
+    negacoes_preferidas: List[str] = field(default_factory=list)
+    usa_maiusculas: bool = False
+    usa_pontuacao: bool = True
+    
     # Configurações
     config: Dict[str, Any] = field(default_factory=dict)
     
@@ -371,6 +381,93 @@ Para cancelar, digite qualquer outra coisa."""
             os.remove(export_file)
         
         return True
+
+
+    # ========================================
+    # 🗣️ MÉTODOS DE PERSONALIZAÇÃO DE LINGUAGEM
+    # ========================================
+    
+    def aprender_linguagem(self, user_id: str, mensagem: str):
+        """Aprende com o jeito de falar do usuário"""
+        import re
+        perfil = self.get_perfil(user_id)
+        mensagem_lower = mensagem.lower()
+        
+        # Analisa formalidade
+        palavras_informais = ['blz', 'vlw', 'pô', 'cara', 'mano', 'brother', 'tipo', 'né', 'tá', 'ta']
+        palavras_formais = ['senhor', 'senhora', 'por favor', 'poderia', 'gostaria', 'agradeço']
+        
+        pontos_informal = sum(1 for p in palavras_informais if p in mensagem_lower)
+        pontos_formal = sum(1 for p in palavras_formais if p in mensagem_lower)
+        
+        if pontos_informal > pontos_formal * 2:
+            perfil['nivel_formalidade'] = 'informal'
+        elif pontos_formal > pontos_informal * 2:
+            perfil['nivel_formalidade'] = 'formal'
+        else:
+            perfil['nivel_formalidade'] = 'neutro'
+        
+        # Detecta emojis
+        emojis = re.findall(r'[\U0001F300-\U0001F9FF]|[\u2600-\u26FF]|[\u2700-\u27BF]', mensagem)
+        if not isinstance(perfil.get('emojis_usados'), dict):
+            perfil['emojis_usados'] = {}
+        for emoji in emojis:
+            perfil['emojis_usados'][emoji] = perfil['emojis_usados'].get(emoji, 0) + 1
+        
+        # Aprende saudações
+        saudacoes = ['oi', 'olá', 'opa', 'e ai', 'fala', 'salve', 'bom dia', 'boa tarde']
+        if not isinstance(perfil.get('saudacoes_preferidas'), list):
+            perfil['saudacoes_preferidas'] = []
+        for saudacao in saudacoes:
+            if saudacao in mensagem_lower and saudacao not in perfil['saudacoes_preferidas']:
+                perfil['saudacoes_preferidas'].append(saudacao)
+                if len(perfil['saudacoes_preferidas']) > 3:
+                    perfil['saudacoes_preferidas'].pop(0)
+        
+        # Aprende confirmações
+        confirmacoes = ['ok', 'blz', 'beleza', 'show', 'massa', 'certo', 'sim', 'dale', 'ta', 'tá']
+        if not isinstance(perfil.get('confirmacoes_preferidas'), list):
+            perfil['confirmacoes_preferidas'] = []
+        for conf in confirmacoes:
+            if conf in mensagem_lower and conf not in perfil['confirmacoes_preferidas']:
+                perfil['confirmacoes_preferidas'].append(conf)
+                if len(perfil['confirmacoes_preferidas']) > 3:
+                    perfil['confirmacoes_preferidas'].pop(0)
+        
+        # Detecta uso de maiúsculas e pontuação
+        perfil['usa_maiusculas'] = any(c.isupper() for c in mensagem)
+        perfil['usa_pontuacao'] = any(p in mensagem for p in ['.', '!', '?', ','])
+        
+        self._save_data()
+    
+    def adaptar_resposta(self, user_id: str, resposta: str) -> str:
+        """Adapta resposta para o estilo do usuário"""
+        perfil = self.get_perfil(user_id)
+        nivel = perfil.get('nivel_formalidade', 'neutro')
+        
+        # Substitui confirmações genéricas por preferidas
+        confirmacoes = perfil.get('confirmacoes_preferidas', [])
+        if confirmacoes and any(palavra in resposta for palavra in ['Ok', 'Pronto', 'Feito']):
+            palavra_preferida = confirmacoes[-1].capitalize()
+            for palavra_original in ['Ok', 'Pronto', 'Feito', 'Concluído']:
+                if palavra_original in resposta:
+                    resposta = resposta.replace(palavra_original, palavra_preferida, 1)
+                    break
+        
+        # Adapta saudações
+        saudacoes = perfil.get('saudacoes_preferidas', [])
+        if saudacoes:
+            palavra_preferida = saudacoes[-1].capitalize()
+            for saudacao_padrao in ['Olá', 'Oi', 'Bom dia', 'Boa tarde']:
+                if resposta.startswith(saudacao_padrao):
+                    resposta = resposta.replace(saudacao_padrao, palavra_preferida, 1)
+                    break
+        
+        # Remove pontuação excessiva se usuário não usa
+        if not perfil.get('usa_pontuacao', True):
+            resposta = resposta.replace('!', '').replace('...', '')
+        
+        return resposta
 
 
 # Instância global

@@ -11,6 +11,7 @@ import aiohttp
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, asdict
+from middleware.formatador_respostas import FormatadorRespostas, humanizar
 
 # Tentar importar Google Generative AI (Gemini - gratuito)
 try:
@@ -488,11 +489,19 @@ Analise a mensagem e retorne um JSON com a ação apropriada.
         # === CRIAR TAREFA ===
         tarefa = self._detectar_tarefa(msg, msg_original)
         if tarefa:
+            descricao = tarefa['descricao']
+            prioridade = tarefa.get('prioridade', 'normal')
+            
+            # Resposta humanizada
+            resposta = f"✅ Anotado!\n📝 {descricao}"
+            
+            if prioridade == 'alta':
+                resposta += "\n🔴 Prioridade alta"
+            
             return Acao(
                 tipo='criar_tarefa',
-                parametros={'descricao': tarefa['descricao'], 'prioridade': tarefa.get('prioridade', 'normal')},
-                resposta=f"✅ Anotado! Vou criar a tarefa:\n📝 *{tarefa['descricao']}*"
-                        + (f"\n🔴 Prioridade: Alta" if tarefa.get('prioridade') == 'alta' else "")
+                parametros={'descricao': descricao, 'prioridade': prioridade},
+                resposta=resposta
             )
         
         # === CRIAR LEMBRETE ===
@@ -508,12 +517,30 @@ Analise a mensagem e retorne um JSON com a ação apropriada.
         # === REGISTRAR GASTO ===
         gasto = self._detectar_gasto(msg, msg_original)
         if gasto:
+            # Formata resposta humanizada
+            descricao = gasto.get('descricao', '')
+            categoria = gasto.get('categoria', 'outros')
+            valor = gasto['valor']
+            
+            emoji_cat = {
+                'alimentacao': '🍔',
+                'transporte': '🚗',
+                'saude': '💊',
+                'lazer': '🎮',
+                'moradia': '🏠',
+                'outros': '💸'
+            }.get(categoria.lower(), '💸')
+            
+            resposta = f"{emoji_cat} Anotado! Você gastou R$ {valor:.2f}"
+            if descricao:
+                resposta += f" em {descricao}"
+            if categoria and categoria != 'outros':
+                resposta += f"\n📊 Categoria: {categoria.capitalize()}"
+            
             return Acao(
                 tipo='registrar_gasto',
                 parametros=gasto,
-                resposta=f"💸 Gasto registrado!\n💰 *R$ {gasto['valor']:.2f}*"
-                        + (f" em *{gasto['categoria']}*" if gasto.get('categoria') else "")
-                        + (f"\n📝 {gasto['descricao']}" if gasto.get('descricao') else "")
+                resposta=resposta
             )
         
         # === REGISTRAR RECEITA ===
