@@ -59,3 +59,25 @@ tmp/
 # OS files
 .DS_Store
 Thumbs.db
+
+# WhatsApp session files (sensitive data)
+whatsapp_bot/auth_info/
+
+# Database files (generated)
+data/financeiro.db
+data/*.db-journal
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+*.temp
+
+# Backup files
+*.bak
+*.backup
+*~
