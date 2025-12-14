@@ -52,14 +52,32 @@ Python 3.8 ou superior
 Pip (gerenciador de pacotes Python)
 ```
 
-### Instalação
+### Instalação Rápida (Recomendado)
+
+#### Windows
+```cmd
+# Execute o script de setup automático
+setup.bat
+```
+
+#### Linux/Mac
+```bash
+# Execute o script de setup automático
+chmod +x setup.sh
+./setup.sh
+```
+
+### Instalação Manual
 ```bash
 # Clone o repositório
-git clone https://github.com/SEU_USERNAME/assistente-pessoal.git
+git clone https://github.com/mlisboa17/assistente-pessoal.git
 cd assistente-pessoal
 
 # Instale as dependências
 pip install -r requirements.txt
+
+# Instale bibliotecas de processamento de PDF (essenciais para extração)
+pip install PyMuPDF "camelot-py[cv]" tabula-py ofxparse
 ```
 
 ### Executar o Sistema
@@ -77,6 +95,17 @@ python api_server.py
 3. **Configure contas bancárias**
 4. **Faça upload** dos extratos em PDF
 5. **Revise categorias** das transações
+
+## 🔧 Bibliotecas Essenciais
+
+O sistema utiliza bibliotecas especializadas para processamento de PDFs bancários:
+
+- **PyMuPDF (Fitz)**: Processamento avançado de texto em PDFs
+- **Camelot**: Extração inteligente de tabelas estruturadas
+- **Tabula-py**: Extração de tabelas via Java (Tabula)
+- **Ofxparse**: Processamento de arquivos OFX bancários
+
+> **Importante**: Essas bibliotecas são **essenciais** para a funcionalidade completa do sistema. O script de setup as instala automaticamente.
 
 ## 📁 Estrutura do Projeto
 
