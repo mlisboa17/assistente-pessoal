@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro de Contatos - Assistente Pessoal{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="mb-0">
+                    <i class="fas fa-address-book me-2"></i>Cadastro de Contatos
+                </h1>
+                <p class="text-muted mb-0">Gerencie clientes, fornecedores e outros contatos</p>
+            </div>
+            <div>
+                <a href="/cadastros" class="btn btn-outline-secondary me-2">
+                    <i class="fas fa-arrow-left me-2"></i>Voltar
+                </a>
+                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalNovoContato">
+                    <i class="fas fa-plus me-2"></i>Novo Contato
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Lista de Contatos -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-address-book me-2"></i>Contatos Cadastrados
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="tabelaContatos">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Tipo</th>
+                                <th>Categoria</th>
+                                <th>Telefone</th>
+                                <th>Email</th>
+                                <th>Cidade</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Dados serão carregados via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>Estatísticas
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row text-center mb-3">
+                    <div class="col-12">
+                        <div class="h3 mb-0 text-success" id="totalContatos">0</div>
+                        <small class="text-muted">Total de Contatos</small>
+                    </div>
+                </div>
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="h5 mb-0 text-primary" id="clientes">0</div>
+                        <small class="text-muted">Clientes</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="h5 mb-0 text-warning" id="fornecedores">0</div>
+                        <small class="text-muted">Fornecedores</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="h5 mb-0 text-info" id="outros">0</div>
+                        <small class="text-muted">Outros</small>
+                    </div>
+                </div>
+                <hr>
+                <div class="text-center">
+                    <div class="h5 mb-0 text-secondary" id="contatosAtivos">0</div>
+                    <small class="text-muted">Contatos Ativos</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Novo Contato -->
+<div class="modal fade" id="modalNovoContato" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-address-book me-2"></i>Novo Contato
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formNovoContato">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="nome" class="form-label">Nome/Razão Social *</label>
+                            <input type="text" class="form-control" id="nome" name="nome" placeholder="Nome completo ou razão social" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="tipo_pessoa" class="form-label">Tipo de Pessoa *</label>
+                            <select class="form-select" id="tipo_pessoa" name="tipo_pessoa" required>
+                                <option value="">Selecione...</option>
+                                <option value="PF">Pessoa Física</option>
+                                <option value="PJ">Pessoa Jurídica</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="cpf_cnpj" class="form-label">CPF/CNPJ</label>
+                            <input type="text" class="form-control" id="cpf_cnpj" name="cpf_cnpj" placeholder="000.000.000-00 ou 00.000.000/0000-00">
+                            <div class="form-text">CPF para PF, CNPJ para PJ</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="categoria" class="form-label">Categoria *</label>
+                            <select class="form-select" id="categoria" name="categoria" required>
+                                <option value="">Selecione...</option>
+                                <option value="Cliente">Cliente</option>
+                                <option value="Fornecedor">Fornecedor</option>
+                                <option value="Funcionário">Funcionário</option>
+                                <option value="Parceiro">Parceiro</option>
+                                <option value="Outro">Outro</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="telefone" class="form-label">Telefone</label>
+                            <input type="text" class="form-control" id="telefone" name="telefone" placeholder="(11) 99999-9999">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email" placeholder="contato@empresa.com">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="cep" class="form-label">CEP</label>
+                            <input type="text" class="form-control" id="cep" name="cep" placeholder="00000-000">
+                        </div>
+                        <div class="col-md-8 mb-3">
+                            <label for="endereco" class="form-label">Endereço</label>
+                            <input type="text" class="form-control" id="endereco" name="endereco" placeholder="Rua, número, complemento">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="cidade" class="form-label">Cidade</label>
+                            <input type="text" class="form-control" id="cidade" name="cidade" placeholder="São Paulo">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="estado" class="form-label">Estado</label>
+                            <select class="form-select" id="estado" name="estado">
+                                <option value="">Selecione...</option>
+                                <option value="AC">Acre</option>
+                                <option value="AL">Alagoas</option>
+                                <option value="AP">Amapá</option>
+                                <option value="AM">Amazonas</option>
+                                <option value="BA">Bahia</option>
+                                <option value="CE">Ceará</option>
+                                <option value="DF">Distrito Federal</option>
+                                <option value="ES">Espírito Santo</option>
+                                <option value="GO">Goiás</option>
+                                <option value="MA">Maranhão</option>
+                                <option value="MT">Mato Grosso</option>
+                                <option value="MS">Mato Grosso do Sul</option>
+                                <option value="MG">Minas Gerais</option>
+                                <option value="PA">Pará</option>
+                                <option value="PB">Paraíba</option>
+                                <option value="PR">Paraná</option>
+                                <option value="PE">Pernambuco</option>
+                                <option value="PI">Piauí</option>
+                                <option value="RJ">Rio de Janeiro</option>
+                                <option value="RN">Rio Grande do Norte</option>
+                                <option value="RS">Rio Grande do Sul</option>
+                                <option value="RO">Rondônia</option>
+                                <option value="RR">Roraima</option>
+                                <option value="SC">Santa Catarina</option>
+                                <option value="SP">São Paulo</option>
+                                <option value="SE">Sergipe</option>
+                                <option value="TO">Tocantins</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="pais" class="form-label">País</label>
+                            <input type="text" class="form-control" id="pais" name="pais" value="Brasil" placeholder="Brasil">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="observacoes" class="form-label">Observações</label>
+                            <textarea class="form-control" id="observacoes" name="observacoes" rows="3" placeholder="Informações adicionais sobre o contato"></textarea>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="status" class="form-label">Status</label>
+                            <select class="form-select" id="status" name="status">
+                                <option value="Ativo">Ativo</option>
+                                <option value="Inativo">Inativo</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-2"></i>Salvar Contato
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Carregar contatos
+async function carregarContatos() {
+    try {
+        // TODO: Implementar carregamento via API
+        const contatos = []; // Dados mockados por enquanto
+
+        const tbody = document.querySelector('#tabelaContatos tbody');
+        tbody.innerHTML = '';
+
+        if (contatos.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-4">
+                        <i class="fas fa-address-book fa-2x mb-3"></i>
+                        <br>Nenhum contato cadastrado ainda
+                        <br><small>Clique em "Novo Contato" para começar</small>
+                    </td>
+                </tr>
+            `;
+        } else {
+            contatos.forEach(contato => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${contato.nome}</td>
+                    <td><span class="badge bg-${contato.tipo_pessoa === 'PF' ? 'primary' : 'success'}">${contato.tipo_pessoa}</span></td>
+                    <td>${contato.categoria}</td>
+                    <td>${contato.telefone || '-'}</td>
+                    <td>${contato.email || '-'}</td>
+                    <td>${contato.cidade || '-'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-success me-1" onclick="editarContato(${contato.id})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="excluirContato(${contato.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Atualizar estatísticas
+        const clientes = contatos.filter(c => c.categoria === 'Cliente').length;
+        const fornecedores = contatos.filter(c => c.categoria === 'Fornecedor').length;
+        const outros = contatos.filter(c => !['Cliente', 'Fornecedor'].includes(c.categoria)).length;
+        const ativos = contatos.filter(c => c.status === 'Ativo').length;
+
+        document.getElementById('totalContatos').textContent = contatos.length;
+        document.getElementById('clientes').textContent = clientes;
+        document.getElementById('fornecedores').textContent = fornecedores;
+        document.getElementById('outros').textContent = outros;
+        document.getElementById('contatosAtivos').textContent = ativos;
+
+    } catch (error) {
+        console.error('Erro ao carregar contatos:', error);
+    }
+}
+
+// Salvar novo contato
+document.getElementById('formNovoContato').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+
+    try {
+        const response = await fetch('/api/contatos', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert('Contato criado com sucesso!');
+            bootstrap.Modal.getInstance(document.getElementById('modalNovoContato')).hide();
+            this.reset();
+            carregarContatos();
+        } else {
+            alert('Erro: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao salvar contato');
+    }
+});
+
+// Funções de edição e exclusão (placeholders)
+function editarContato(id) {
+    alert('Função de edição será implementada');
+}
+
+function excluirContato(id) {
+    if (confirm('Tem certeza que deseja excluir este contato?')) {
+        alert('Função de exclusão será implementada');
+    }
+}
+
+// Inicializar
+document.addEventListener('DOMContentLoaded', function() {
+    carregarContatos();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,15 @@
+{
+  "name": "assistente-whatsapp",
+  "version": "1.0.0",
+  "description": "Bot WhatsApp para Assistente Pessoal",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "axios": "^1.7.9",
+    "pino": "^9.6.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

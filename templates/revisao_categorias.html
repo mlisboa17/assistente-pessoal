@@ -1,0 +1,1356 @@
+{% extends "base.html" %}
+
+{% block title %}Revisão de Categorias - Assistente Pessoal{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="mb-0">
+                    <i class="fas fa-edit me-2"></i>Revisão de Categorias
+                </h1>
+                <p class="text-muted mb-0">Revise e confirme as categorias das transações antes da integração</p>
+            </div>
+            <div class="d-flex gap-2">
+                <button id="btnNovaCategoria" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#modalNovaCategoria">
+                    <i class="fas fa-plus me-2"></i>Nova Categoria
+                </button>
+                <button id="btnSalvar" class="btn btn-success">
+                    <i class="fas fa-save me-2"></i>Salvar e Integrar
+                </button>
+                <button id="btnCancelar" class="btn btn-secondary">
+                    <i class="fas fa-times me-2"></i>Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alertas/Mensagens -->
+<div id="alertContainer" class="mb-4" style="display: none;">
+    <div id="alertMessage" class="alert alert-dismissible fade show" role="alert">
+        <span id="alertIcon"></span>
+        <span id="alertText"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+</div>
+
+<!-- Estatísticas -->
+<div class="row mb-4">
+    <div class="col-md-2">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <i class="fas fa-list fa-2x text-primary mb-2"></i>
+                <h5 class="card-title" id="statTotal">{{ transacoes|length }}</h5>
+                <p class="card-text text-muted">Total de Transações</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                <h5 class="card-title" id="statCategorizadas">{{ categorizadas|length }}</h5>
+                <p class="card-text text-muted">Categorizadas</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <i class="fas fa-question-circle fa-2x text-warning mb-2"></i>
+                <h5 class="card-title" id="statNaoCategorizadas">{{ nao_categorizadas|length }}</h5>
+                <p class="card-text text-muted">Sem Categoria</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <i class="fas fa-plus-circle fa-2x text-info mb-2"></i>
+                <h5 class="card-title" id="statNovasCategorias">0</h5>
+                <p class="card-text text-muted">Novas Categorias</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card border-secondary">
+            <div class="card-body text-center">
+                <i class="fas fa-check-square fa-2x text-secondary mb-2"></i>
+                <h5 class="card-title" id="statSelecionadas">0</h5>
+                <p class="card-text text-muted">Selecionadas</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card border-danger">
+            <div class="card-body text-center">
+                <i class="fas fa-question fa-2x text-danger mb-2"></i>
+                <h5 class="card-title" id="statDuvidas">0</h5>
+                <p class="card-text text-muted">Dúvidas</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filtros e Agrupamento -->
+<div class="card mb-4 shadow-sm">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Filtros e Pesquisa</h5>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-2">
+                <label for="filtroBanco" class="form-label">Banco</label>
+                <select class="form-select" id="filtroBanco">
+                    <option value="">Todos</option>
+                    {% for banco in bancos_disponiveis %}
+                    <option value="{{ banco }}">{{ banco.replace('_', ' ').title() }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="filtroTipo" class="form-label">Tipo</label>
+                <select class="form-select" id="filtroTipo">
+                    <option value="">Todos</option>
+                    <option value="credito">Crédito</option>
+                    <option value="debito">Débito</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="filtroCategoria" class="form-label">Categoria</label>
+                <select class="form-select" id="filtroCategoria">
+                    <option value="">Todas</option>
+                    <option value="sem_categoria">Sem Categoria</option>
+                    {% for categoria in categorias_disponiveis %}
+                    <option value="{{ categoria }}">{{ categoria|title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="filtroStatus" class="form-label">Status</label>
+                <select class="form-select" id="filtroStatus">
+                    <option value="">Todos</option>
+                    <option value="categorizado">Categorizados</option>
+                    <option value="nao_categorizado">Sem Categoria</option>
+                    <option value="duvida">Com Dúvida</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="agrupamento" class="form-label">Agrupar por</label>
+                <select class="form-select" id="agrupamento">
+                    <option value="">Sem Agrupamento</option>
+                    <option value="categoria">Categoria</option>
+                    <option value="tipo">Tipo</option>
+                    <option value="data">Data</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="filtroBusca" class="form-label">Buscar</label>
+                <input type="text" class="form-control" id="filtroBusca" placeholder="Descrição...">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <div class="btn-group" role="group">
+                    <button id="btnLimparFiltros" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i>Limpar
+                    </button>
+                    <button id="btnAplicarCategoria" class="btn btn-outline-primary">
+                        <i class="fas fa-magic me-1"></i>Aplicar
+                    </button>
+                    <button id="btnSelecionarTodos" class="btn btn-outline-info">
+                        <i class="fas fa-check-square me-1"></i>Todos
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+            <div class="col-md-2">
+                <label for="filtroStatus" class="form-label">Status</label>
+                <select class="form-select" id="filtroStatus">
+                    <option value="">Todos</option>
+                    <option value="categorizado">Categorizados</option>
+                    <option value="nao_categorizado">Sem Categoria</option>
+                    <option value="duvida">Com Dúvida</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="agrupamento" class="form-label">Agrupar por</label>
+                <select class="form-select" id="agrupamento">
+                    <option value="">Sem Agrupamento</option>
+                    <option value="categoria">Categoria</option>
+                    <option value="tipo">Tipo</option>
+                    <option value="data">Data</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="filtroBusca" class="form-label">Buscar</label>
+                <input type="text" class="form-control" id="filtroBusca" placeholder="Descrição...">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <div class="btn-group" role="group">
+                    <button id="btnLimparFiltros" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i>Limpar
+                    </button>
+                    <button id="btnAplicarCategoria" class="btn btn-outline-primary">
+                        <i class="fas fa-magic me-1"></i>Aplicar
+                    </button>
+                    <button id="btnSelecionarTodos" class="btn btn-outline-info">
+                        <i class="fas fa-check-square me-1"></i>Todos
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dúvidas e Perguntas -->
+<div class="card mb-4" id="cardDuvidas" style="display: none;">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-question-circle me-2 text-warning"></i>Dúvidas sobre Categorização
+        </h5>
+    </div>
+    <div class="card-body">
+        <div id="listaDuvidas">
+            <!-- Dúvidas serão inseridas aqui dinamicamente -->
+        </div>
+    </div>
+</div>
+
+<!-- Tabela de Transações -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="fas fa-table me-2"></i>Transações
+        </h5>
+        <div class="d-flex gap-2">
+            <button id="btnMarcarDuvida" class="btn btn-sm btn-outline-warning" disabled>
+                <i class="fas fa-question me-1"></i>Marcar Dúvida
+            </button>
+            <button id="btnRemoverSelecao" class="btn btn-sm btn-outline-secondary" disabled>
+                <i class="fas fa-times me-1"></i>Limpar Seleção
+            </button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div id="gruposContainer">
+            <!-- Grupos serão inseridos aqui dinamicamente -->
+        </div>
+
+        <!-- Tabela padrão (quando não há agrupamento) -->
+        <div id="tabelaPadrao">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="tabelaTransacoes">
+                    <thead class="table-light">
+                        <tr>
+                            <th width="50">
+                                <input type="checkbox" id="checkAll" class="form-check-input">
+                            </th>
+                            <th width="50">#</th>
+                            <th width="80" class="sortable" data-column="tipo">
+                                Tipo <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th width="100" class="sortable" data-column="data">
+                                Data <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th class="sortable" data-column="descricao">
+                                Descrição <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th width="120" class="sortable text-end" data-column="valor">
+                                Valor <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th width="200" class="sortable" data-column="categoria">
+                                Categoria <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th width="100">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transacao in transacoes %}
+                        <tr data-id="{{ loop.index }}" data-tipo="{{ transacao.tipo }}" data-categoria="{{ transacao.categoria or 'sem_categoria' }}" data-banco="{{ transacao.descricao.split(': ')[0] if ': ' in transacao.descricao else '' }}" data-status="{% if transacao.categoria == 'sem_categoria' or not transacao.categoria %}nao_categorizado{% else %}categorizado{% endif %}">
+                            <td>
+                                <input type="checkbox" class="form-check-input transacao-checkbox" data-id="{{ loop.index }}">
+                            </td>
+                            <td class="fw-bold">{{ loop.index }}</td>
+                            <td>
+                                {% if transacao.tipo == 'credito' %}
+                                    <span class="badge bg-success">💚 Crédito</span>
+                                {% else %}
+                                    <span class="badge bg-danger">❤️ Débito</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ transacao.data }}</td>
+                            <td>
+                                <div class="fw-bold">{{ transacao.descricao[:50] }}</div>
+                                {% if transacao.descricao|length > 50 %}
+                                <small class="text-muted">{{ transacao.descricao[50:] }}</small>
+                                {% endif %}
+                            </td>
+                            <td class="text-end fw-bold">
+                                R$ {{ "%.2f"|format(transacao.valor) }}
+                            </td>
+                            <td>
+                                <select class="form-select form-select-sm categoria-select" data-id="{{ loop.index }}">
+                                    <option value="sem_categoria" {% if transacao.categoria == 'sem_categoria' %}selected{% endif %}>Sem Categoria</option>
+                                    {% for categoria in categorias_disponiveis %}
+                                    <option value="{{ categoria }}" {% if transacao.categoria == categoria %}selected{% endif %}>{{ categoria.title() }}</option>
+                                    {% endfor %}
+                                    <option value="__nova">+ Nova Categoria</option>
+                                </select>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary btn-editar" data-id="{{ loop.index }}" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-warning btn-duvida" data-id="{{ loop.index }}" title="Marcar Dúvida">
+                                    <i class="fas fa-question"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+</div>
+
+<!-- Modal para Editar Transação -->
+<div class="modal fade" id="modalEditarTransacao" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit me-2"></i>Editar Transação
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="editData" class="form-label">Data</label>
+                        <input type="date" class="form-control" id="editData">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="editTipo" class="form-label">Tipo</label>
+                        <select class="form-select" id="editTipo">
+                            <option value="credito">Crédito</option>
+                            <option value="debito">Débito</option>
+                            <option value="entrada">Entrada</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label for="editDescricao" class="form-label">Descrição</label>
+                        <textarea class="form-control" id="editDescricao" rows="3"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="editValor" class="form-label">Valor</label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input type="number" class="form-control" id="editValor" step="0.01">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="editCategoria" class="form-label">Categoria</label>
+                        <select class="form-select" id="editCategoria">
+                            <option value="sem_categoria">Sem Categoria</option>
+                            {% for categoria in categorias_disponiveis %}
+                            <option value="{{ categoria }}">{{ categoria|title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnSalvarEdicao">
+                    <i class="fas fa-save me-2"></i>Salvar Alterações
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Nova Categoria -->
+<div class="modal fade" id="modalNovaCategoria" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle me-2"></i>Nova Categoria
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="novaCategoriaNome" class="form-label">Nome da Categoria</label>
+                    <input type="text" class="form-control" id="novaCategoriaNome" placeholder="Ex: emprestimos, doacoes, freelance">
+                    <div class="form-text">Digite um nome descritivo para a nova categoria</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnAdicionarCategoria">Adicionar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmação -->
+<div class="modal fade" id="modalConfirmacao" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-save me-2"></i>Confirmar Integração
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja salvar as categorias e integrar as transações ao sistema financeiro?</p>
+                <div class="alert alert-info">
+                    <strong>Resumo:</strong><br>
+                    <span id="resumoTransacoes"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Revisar Mais</button>
+                <button type="button" class="btn btn-success" id="btnConfirmarIntegracao">
+                    <i class="fas fa-check me-2"></i>Sim, Integrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Confirmar Aplicação de Categoria -->
+<div class="modal fade" id="modalAplicarCategoria" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-magic me-2"></i>Aplicar Categoria
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="mensagemAplicar"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmarAplicar">
+                    <i class="fas fa-check me-2"></i>Aplicar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let categoriasDisponiveis = {{ categorias_disponiveis|tojson }};
+    let transacoesOriginais = {{ transacoes|tojson }};
+    let transacoesModificadas = [...transacoesOriginais];
+    let duvidas = {}; // Armazenar dúvidas por ID de transação
+
+    // Elementos DOM
+    const alertContainer = document.getElementById('alertContainer');
+    const alertMessage = document.getElementById('alertMessage');
+    const alertIcon = document.getElementById('alertIcon');
+    const alertText = document.getElementById('alertText');
+    const tabela = document.getElementById('tabelaTransacoes');
+    const gruposContainer = document.getElementById('gruposContainer');
+    const tabelaPadrao = document.getElementById('tabelaPadrao');
+    const cardDuvidas = document.getElementById('cardDuvidas');
+    const listaDuvidas = document.getElementById('listaDuvidas');
+
+    // Filtros
+    const filtroBanco = document.getElementById('filtroBanco');
+    const filtroTipo = document.getElementById('filtroTipo');
+    const filtroCategoria = document.getElementById('filtroCategoria');
+    const filtroStatus = document.getElementById('filtroStatus');
+    const filtroBusca = document.getElementById('filtroBusca');
+    const agrupamento = document.getElementById('agrupamento');
+
+    // Botões
+    const btnLimparFiltros = document.getElementById('btnLimparFiltros');
+    const btnAplicarCategoria = document.getElementById('btnAplicarCategoria');
+    const btnSelecionarTodos = document.getElementById('btnSelecionarTodos');
+    const btnMarcarDuvida = document.getElementById('btnMarcarDuvida');
+    const btnRemoverSelecao = document.getElementById('btnRemoverSelecao');
+    const btnSalvar = document.getElementById('btnSalvar');
+    const btnCancelar = document.getElementById('btnCancelar');
+    const checkAll = document.getElementById('checkAll');
+
+    // Modais
+    const modalNovaCategoria = new bootstrap.Modal(document.getElementById('modalNovaCategoria'));
+    const modalConfirmacao = new bootstrap.Modal(document.getElementById('modalConfirmacao'));
+    const modalAplicar = new bootstrap.Modal(document.getElementById('modalAplicarCategoria'));
+
+    // Função para mostrar mensagens
+    function mostrarMensagem(mensagem, tipo = 'success', icone = 'fas fa-check-circle') {
+        alertIcon.className = icone;
+        alertText.textContent = mensagem;
+        alertMessage.className = `alert alert-${tipo} alert-dismissible fade show`;
+
+        if (tipo === 'success') {
+            alertIcon.className = 'fas fa-check-circle me-2';
+        } else if (tipo === 'warning') {
+            alertIcon.className = 'fas fa-exclamation-triangle me-2';
+        } else if (tipo === 'danger') {
+            alertIcon.className = 'fas fa-times-circle me-2';
+        } else if (tipo === 'info') {
+            alertIcon.className = 'fas fa-info-circle me-2';
+        }
+
+        alertContainer.style.display = 'block';
+        setTimeout(() => {
+            alertContainer.style.display = 'none';
+        }, 5000);
+    }
+
+    // Função para atualizar estatísticas
+    function atualizarEstatisticas() {
+        // Contar linhas visíveis (considerando agrupamento)
+        let linhasVisiveis = [];
+        if (gruposContainer.children.length > 0) {
+            // Se há agrupamento, contar todas as linhas dos grupos (elas já são filtradas)
+            linhasVisiveis = Array.from(document.querySelectorAll('.table-responsive table tbody tr'));
+        } else {
+            // Se não há agrupamento, contar da tabela principal
+            linhasVisiveis = Array.from(document.querySelectorAll('#tabelaTransacoes tbody tr')).filter(tr => tr.style.display !== 'none');
+        }
+
+        const total = linhasVisiveis.length;
+        const categorizadas = linhasVisiveis.filter(tr => tr.dataset.categoria && tr.dataset.categoria !== 'sem_categoria').length;
+        const naoCategorizadas = total - categorizadas;
+        const novasCategorias = categoriasDisponiveis.filter(c => !{{ categorias_disponiveis|tojson }}.includes(c)).length;
+        const selecionadas = document.querySelectorAll('.transacao-checkbox:checked').length;
+        const totalDuvidas = Object.keys(duvidas).length;
+
+        document.getElementById('statTotal').textContent = total;
+        document.getElementById('statCategorizadas').textContent = categorizadas;
+        document.getElementById('statNaoCategorizadas').textContent = naoCategorizadas;
+        document.getElementById('statNovasCategorias').textContent = novasCategorias;
+        document.getElementById('statSelecionadas').textContent = selecionadas;
+        document.getElementById('statDuvidas').textContent = totalDuvidas;
+
+        // Atualizar status das transações
+        transacoesModificadas.forEach((transacao, index) => {
+            const linha = document.querySelector(`tr[data-id="${index + 1}"]`);
+            if (linha) {
+                const status = transacao.categoria === 'sem_categoria' ? 'nao_categorizado' : 'categorizado';
+                linha.dataset.status = duvidas[index + 1] ? 'duvida' : status;
+            }
+        });
+
+        // Mostrar/esconder card de dúvidas
+        cardDuvidas.style.display = totalDuvidas > 0 ? 'block' : 'none';
+        atualizarListaDuvidas();
+    }
+    }
+
+    // Função para atualizar lista de dúvidas
+    function atualizarListaDuvidas() {
+        listaDuvidas.innerHTML = '';
+        Object.entries(duvidas).forEach(([id, duvida]) => {
+            const transacao = transacoesModificadas[parseInt(id) - 1];
+            const div = document.createElement('div');
+            div.className = 'alert alert-warning alert-dismissible fade show mb-2';
+            div.innerHTML = `
+                <strong>Transação ${id}:</strong> ${transacao.descricao.substring(0, 50)}...
+                <br><small class="text-muted">${duvida}</small>
+                <button type="button" class="btn-close btn-close-white" onclick="removerDuvida(${id})"></button>
+            `;
+            listaDuvidas.appendChild(div);
+        });
+    }
+
+    // Função para remover dúvida
+    function removerDuvida(id) {
+        delete duvidas[id];
+        atualizarEstatisticas();
+        mostrarMensagem(`Dúvida removida da transação ${id}.`, 'info', 'fas fa-info-circle');
+    }
+
+    // Função para atualizar tabela após edições
+    function atualizarTabela() {
+        transacoesModificadas.forEach((transacao, index) => {
+            const linha = document.querySelector(`tr[data-id="${index + 1}"]`);
+            if (linha) {
+                // Atualizar descrição
+                const descricaoCell = linha.querySelector('td:nth-child(2)');
+                if (descricaoCell) {
+                    const descricaoPrincipal = descricaoCell.querySelector('.fw-bold');
+                    const descricaoSecundaria = descricaoCell.querySelector('.text-muted');
+                    
+                    if (descricaoPrincipal) {
+                        descricaoPrincipal.textContent = transacao.descricao.length > 50 ? transacao.descricao.substring(0, 50) + '...' : transacao.descricao;
+                    }
+                    if (descricaoSecundaria && transacao.descricao.length > 50) {
+                        descricaoSecundaria.textContent = transacao.descricao.substring(50);
+                    }
+                }
+
+                // Atualizar valor
+                const valorCell = linha.querySelector('td:nth-child(3)');
+                if (valorCell) {
+                    valorCell.textContent = `R$ ${transacao.valor.toFixed(2)}`;
+                }
+
+                // Atualizar select de categoria
+                const categoriaSelect = linha.querySelector('.categoria-select');
+                if (categoriaSelect) {
+                    categoriaSelect.value = transacao.categoria || 'sem_categoria';
+                }
+
+                // Atualizar data attributes
+                linha.dataset.tipo = transacao.tipo;
+                linha.dataset.categoria = transacao.categoria || 'sem_categoria';
+                linha.dataset.status = duvidas[index + 1] ? 'duvida' : (transacao.categoria === 'sem_categoria' ? 'nao_categorizado' : 'categorizado');
+            }
+        });
+
+        atualizarEstatisticas();
+        
+        // Se há agrupamento ativo, recriar os grupos com os dados atualizados
+        if (agrupamento.value) {
+            filtrarTabela();
+        }
+    }
+
+    // Função para filtrar tabela
+    function filtrarTabela() {
+        const bancoFiltro = filtroBanco.value;
+        const tipoFiltro = filtroTipo.value;
+        const categoriaFiltro = filtroCategoria.value;
+        const statusFiltro = filtroStatus.value;
+        const buscaFiltro = filtroBusca.value.toLowerCase();
+        const agrupamentoValor = agrupamento.value;
+
+        // Se há agrupamento, precisamos filtrar as linhas originais primeiro
+        if (agrupamentoValor) {
+            // Primeiro, mostrar todas as linhas da tabela principal
+            const todasLinhas = document.querySelectorAll('#tabelaTransacoes tbody tr');
+            todasLinhas.forEach(linha => {
+                linha.style.display = '';
+            });
+
+            // Aplicar filtros às linhas da tabela principal
+            todasLinhas.forEach(linha => {
+                const banco = linha.dataset.banco;
+                const tipo = linha.dataset.tipo;
+                const categoria = linha.dataset.categoria;
+                const status = linha.dataset.status;
+                const descricao = linha.textContent.toLowerCase();
+
+                const matchBanco = !bancoFiltro || banco === bancoFiltro;
+                const matchTipo = !tipoFiltro || tipo === tipoFiltro;
+                const matchCategoria = !categoriaFiltro || categoria === categoriaFiltro;
+                const matchStatus = !statusFiltro || status === statusFiltro;
+                const matchBusca = !buscaFiltro || descricao.includes(buscaFiltro);
+
+                linha.style.display = matchBanco && matchTipo && matchCategoria && matchStatus && matchBusca ? '' : 'none';
+            });
+
+            // Aplicar agrupamento com as linhas filtradas
+            aplicarAgrupamento(agrupamentoValor);
+        } else {
+            // Sem agrupamento, filtrar diretamente a tabela principal
+            const linhas = document.querySelectorAll('#tabelaTransacoes tbody tr');
+
+            linhas.forEach(linha => {
+                const banco = linha.dataset.banco;
+                const tipo = linha.dataset.tipo;
+                const categoria = linha.dataset.categoria;
+                const status = linha.dataset.status;
+                const descricao = linha.textContent.toLowerCase();
+
+                const matchBanco = !bancoFiltro || banco === bancoFiltro;
+                const matchTipo = !tipoFiltro || tipo === tipoFiltro;
+                const matchCategoria = !categoriaFiltro || categoria === categoriaFiltro;
+                const matchStatus = !statusFiltro || status === statusFiltro;
+                const matchBusca = !buscaFiltro || descricao.includes(buscaFiltro);
+
+                linha.style.display = matchBanco && matchTipo && matchCategoria && matchStatus && matchBusca ? '' : 'none';
+            });
+
+            gruposContainer.innerHTML = '';
+            tabelaPadrao.style.display = 'block';
+        }
+
+        atualizarEstatisticas();
+    }
+
+    // Função para aplicar agrupamento
+    function aplicarAgrupamento(tipoAgrupamento) {
+        const grupos = {};
+        const linhasVisiveis = Array.from(document.querySelectorAll('#tabelaTransacoes tbody tr')).filter(tr => tr.style.display !== 'none');
+
+        linhasVisiveis.forEach(linha => {
+            const chave = tipoAgrupamento === 'categoria' ? linha.dataset.categoria :
+                         tipoAgrupamento === 'tipo' ? linha.dataset.tipo :
+                         linha.querySelector('td:nth-child(4)').textContent; // data
+
+            if (!grupos[chave]) {
+                grupos[chave] = [];
+            }
+            grupos[chave].push(linha.cloneNode(true));
+        });
+
+        renderizarGrupos(grupos, tipoAgrupamento);
+    }
+
+    // Função para renderizar grupos
+    function renderizarGrupos(grupos, tipoAgrupamento) {
+        gruposContainer.innerHTML = '';
+        tabelaPadrao.style.display = 'none';
+
+        Object.entries(grupos).forEach(([chave, linhas]) => {
+            const grupoDiv = document.createElement('div');
+            grupoDiv.className = 'mb-4';
+
+            const titulo = tipoAgrupamento === 'categoria' ? (chave === 'sem_categoria' ? 'Sem Categoria' : chave.charAt(0).toUpperCase() + chave.slice(1)) :
+                        tipoAgrupamento === 'tipo' ? (chave === 'credito' ? 'Créditos' : 'Débitos') :
+                        `Data: ${chave}`;
+
+            const totalValor = linhas.reduce((total, linha) => {
+                const valorTexto = linha.querySelector('td:nth-child(6)').textContent.replace('R$ ', '').replace(',', '');
+                const valor = parseFloat(valorTexto);
+                return total + valor;
+            }, 0);
+
+            grupoDiv.innerHTML = `
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <i class="fas fa-folder me-2"></i>${titulo}
+                                <span class="badge bg-secondary ms-2">${linhas.length} transações</span>
+                            </h6>
+                            <span class="fw-bold">Total: R$ ${totalValor.toFixed(2)}</span>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th width="50"><input type="checkbox" class="form-check-input grupo-check-all" data-grupo="${chave}"></th>
+                                        <th width="50">#</th>
+                                        <th width="80" class="sortable" data-column="tipo">
+                                            Tipo <i class="fas fa-sort sort-icon"></i>
+                                        </th>
+                                        <th width="100" class="sortable" data-column="data">
+                                            Data <i class="fas fa-sort sort-icon"></i>
+                                        </th>
+                                        <th class="sortable" data-column="descricao">
+                                            Descrição <i class="fas fa-sort sort-icon"></i>
+                                        </th>
+                                        <th width="120" class="sortable text-end" data-column="valor">
+                                            Valor <i class="fas fa-sort sort-icon"></i>
+                                        </th>
+                                        <th width="200" class="sortable" data-column="categoria">
+                                            Categoria <i class="fas fa-sort sort-icon"></i>
+                                        </th>
+                                        <th width="100">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${linhas.map(linha => linha.innerHTML).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            gruposContainer.appendChild(grupoDiv);
+            
+            // Adicionar listeners de ordenação à nova tabela
+            addSortListeners(grupoDiv.querySelector('table'));
+            
+            // Reatribuir event listeners aos botões de editar e dúvida nos grupos
+            grupoDiv.querySelectorAll('.btn-editar').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = parseInt(this.dataset.id);
+                    const transacao = transacoesModificadas[id - 1];
+
+                    if (!transacao) {
+                        console.error('Transação não encontrada para ID:', id);
+                        mostrarMensagem('Erro: Transação não encontrada.', 'danger');
+                        return;
+                    }
+
+                    // Converter data do formato brasileiro para ISO
+                    const dataBrasileira = transacao.data; // formato DD/MM/YYYY
+                    let dataISO = '';
+                    if (dataBrasileira && dataBrasileira.includes('/')) {
+                        const partes = dataBrasileira.split('/');
+                        if (partes.length === 3) {
+                            // Tentar DD/MM/YYYY primeiro
+                            if (partes[0].length === 2 && partes[1].length === 2) {
+                                dataISO = `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`;
+                            } else if (partes[0].length === 4) {
+                                // Já está em YYYY/MM/DD ou similar
+                                dataISO = dataBrasileira.replace(/\//g, '-');
+                            }
+                        }
+                    }
+
+                    document.getElementById('editData').value = dataISO;
+                    document.getElementById('editTipo').value = transacao.tipo;
+                    document.getElementById('editDescricao').value = transacao.descricao;
+                    document.getElementById('editValor').value = transacao.valor;
+                    document.getElementById('editCategoria').value = transacao.categoria;
+
+                    const modalEditar = new bootstrap.Modal(document.getElementById('modalEditarTransacao'));
+                    modalEditar.show();
+
+                    // Remover event listeners anteriores para evitar duplicação
+                    const btnSalvar = document.getElementById('btnSalvarEdicao');
+                    const newBtnSalvar = btnSalvar.cloneNode(true);
+                    btnSalvar.parentNode.replaceChild(newBtnSalvar, btnSalvar);
+
+                    // Adicionar novo event listener
+                    newBtnSalvar.addEventListener('click', function() {
+                        // Converter data do formato ISO para brasileiro
+                        const dataISO = document.getElementById('editData').value; // formato YYYY-MM-DD
+                        let dataBrasileira = dataISO;
+                        if (dataISO && dataISO.includes('-')) {
+                            const partes = dataISO.split('-');
+                            if (partes.length === 3) {
+                                dataBrasileira = `${partes[2]}/${partes[1]}/${partes[0]}`;
+                            }
+                        }
+                        
+                        transacao.data = dataBrasileira;
+                        transacao.tipo = document.getElementById('editTipo').value;
+                        transacao.descricao = document.getElementById('editDescricao').value;
+                        transacao.valor = parseFloat(document.getElementById('editValor').value);
+                        transacao.categoria = document.getElementById('editCategoria').value;
+
+                        atualizarTabela();
+                        modalEditar.hide();
+                        mostrarMensagem('Transação editada com sucesso!', 'success');
+                    });
+                });
+            });
+            
+            grupoDiv.querySelectorAll('.btn-duvida').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.id;
+                    const duvidaTexto = prompt(`Digite a dúvida sobre a transação ${id}:`);
+                    if (duvidaTexto && duvidaTexto.trim()) {
+                        duvidas[id] = duvidaTexto.trim();
+                        atualizarEstatisticas();
+                        mostrarMensagem(`Dúvida adicionada à transação ${id}.`, 'warning', 'fas fa-question-circle');
+                    }
+                });
+            });
+        });
+
+        // Reatribuir eventos aos checkboxes dos grupos
+        document.querySelectorAll('.grupo-check-all').forEach(check => {
+            check.addEventListener('change', function() {
+                const grupo = this.dataset.grupo;
+                const checkboxes = this.closest('.card').querySelectorAll('.transacao-checkbox');
+                checkboxes.forEach(cb => cb.checked = this.checked);
+                atualizarEstatisticas();
+            });
+        });
+    }
+
+    // Event listeners para filtros
+    filtroBanco.addEventListener('change', filtrarTabela);
+    filtroTipo.addEventListener('change', filtrarTabela);
+    filtroCategoria.addEventListener('change', filtrarTabela);
+    filtroStatus.addEventListener('change', filtrarTabela);
+    filtroBusca.addEventListener('input', filtrarTabela);
+    agrupamento.addEventListener('change', filtrarTabela);
+
+    btnLimparFiltros.addEventListener('click', function() {
+        filtroBanco.value = '';
+        filtroTipo.value = '';
+        filtroCategoria.value = '';
+        filtroStatus.value = '';
+        filtroBusca.value = '';
+        agrupamento.value = '';
+        filtrarTabela();
+        mostrarMensagem('Filtros limpos com sucesso!', 'info', 'fas fa-info-circle');
+    });
+
+    // Checkbox "selecionar todos"
+    checkAll.addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.transacao-checkbox');
+        checkboxes.forEach(cb => cb.checked = this.checked);
+        atualizarEstatisticas();
+        mostrarMensagem(`${this.checked ? 'Todas' : 'Nenhuma'} transação selecionada.`, 'info', 'fas fa-info-circle');
+    });
+
+    // Botão selecionar todos
+    btnSelecionarTodos.addEventListener('click', function() {
+        const checkboxes = document.querySelectorAll('.transacao-checkbox');
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+
+        if (allChecked) {
+            checkboxes.forEach(cb => cb.checked = false);
+            mostrarMensagem('Seleção de todas as transações removida.', 'info', 'fas fa-info-circle');
+        } else {
+            checkboxes.forEach(cb => cb.checked = true);
+            mostrarMensagem('Todas as transações foram selecionadas.', 'success', 'fas fa-check-circle');
+        }
+        atualizarEstatisticas();
+    });
+
+    // Atualizar estado dos checkboxes quando individuais mudam
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('transacao-checkbox')) {
+            atualizarEstatisticas();
+        }
+    });
+
+    // Botão marcar dúvida
+    btnMarcarDuvida.addEventListener('click', function() {
+        const selecionadas = document.querySelectorAll('.transacao-checkbox:checked');
+        if (selecionadas.length === 0) {
+            mostrarMensagem('Selecione pelo menos uma transação para marcar dúvida.', 'warning', 'fas fa-exclamation-triangle');
+            return;
+        }
+
+        const duvidaTexto = prompt('Digite a dúvida sobre essas transações:');
+        if (duvidaTexto && duvidaTexto.trim()) {
+            selecionadas.forEach(cb => {
+                const id = cb.dataset.id;
+                duvidas[id] = duvidaTexto.trim();
+            });
+            atualizarEstatisticas();
+            mostrarMensagem(`${selecionadas.length} transação(ões) marcada(s) com dúvida.`, 'warning', 'fas fa-question-circle');
+        }
+    });
+
+    // Botão remover seleção
+    btnRemoverSelecao.addEventListener('click', function() {
+        document.querySelectorAll('.transacao-checkbox:checked').forEach(cb => cb.checked = false);
+        atualizarEstatisticas();
+        mostrarMensagem('Seleção removida de todas as transações.', 'info', 'fas fa-info-circle');
+    });
+
+    // Aplicar categoria a todos os filtrados/selecionados
+    let transacoesParaAplicarGlobal = [];
+    let categoriaAplicarGlobal = '';
+    btnAplicarCategoria.addEventListener('click', function() {
+        console.log('Botão Aplicar clicado');
+        const categoriaAplicar = filtroCategoria.value;
+        console.log('Categoria selecionada:', categoriaAplicar);
+        if (!categoriaAplicar) {
+            mostrarMensagem('Selecione uma categoria para aplicar.', 'warning', 'fas fa-exclamation-triangle');
+            return;
+        }
+
+        const selecionadas = document.querySelectorAll('.transacao-checkbox:checked');
+        const visiveis = Array.from(document.querySelectorAll('#tabelaTransacoes tbody tr')).filter(tr => tr.style.display !== 'none');
+
+        let transacoesParaAplicar = [];
+        let mensagem = '';
+
+        if (selecionadas.length > 0) {
+            transacoesParaAplicar = Array.from(selecionadas);
+            mensagem = `Aplicar categoria "${categoriaAplicar}" a ${selecionadas.length} transação(ões) selecionada(s)?`;
+        } else if (visiveis.length > 0) {
+            transacoesParaAplicar = visiveis;
+            mensagem = `Aplicar categoria "${categoriaAplicar}" a ${visiveis.length} transação(ões) visível(is)?`;
+        } else {
+            mostrarMensagem('Não há transações para aplicar a categoria.', 'warning', 'fas fa-exclamation-triangle');
+            return;
+        }
+
+        // Armazenar para o modal
+        transacoesParaAplicarGlobal = transacoesParaAplicar;
+        categoriaAplicarGlobal = categoriaAplicar;
+        document.getElementById('mensagemAplicar').textContent = mensagem;
+        modalAplicar.show();
+    });
+
+    // Confirmar aplicação da categoria
+    document.getElementById('btnConfirmarAplicar').addEventListener('click', function() {
+        modalAplicar.hide();
+        transacoesParaAplicarGlobal.forEach(item => {
+            const id = item.dataset ? item.dataset.id : item.querySelector('.transacao-checkbox').dataset.id;
+            const select = item.querySelector ? item.querySelector('.categoria-select') : document.querySelector(`.categoria-select[data-id="${id}"]`);
+            if (select) {
+                select.value = categoriaAplicarGlobal;
+                transacoesModificadas[parseInt(id) - 1].categoria = categoriaAplicarGlobal;
+                item.closest('tr').dataset.categoria = categoriaAplicarGlobal;
+            }
+        });
+        atualizarEstatisticas();
+        mostrarMensagem(`Categoria "${categoriaAplicarGlobal}" aplicada com sucesso!`, 'success', 'fas fa-check-circle');
+    });
+
+    // Event listener para selects de categoria e botões
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('categoria-select')) {
+            const select = e.target;
+            const id = parseInt(select.dataset.id);
+            const novaCategoria = select.value;
+
+            if (novaCategoria === '__nova') {
+                // Abrir modal para nova categoria
+                document.getElementById('novaCategoriaNome').value = '';
+                modalNovaCategoria.show();
+
+                // Quando adicionar nova categoria
+                document.getElementById('btnAdicionarCategoria').onclick = function() {
+                    const nomeCategoria = document.getElementById('novaCategoriaNome').value.trim().toLowerCase();
+                    if (nomeCategoria) {
+                        if (!categoriasDisponiveis.includes(nomeCategoria)) {
+                            categoriasDisponiveis.push(nomeCategoria);
+                            atualizarSelectsCategoria();
+                            mostrarMensagem(`Nova categoria "${nomeCategoria}" criada com sucesso!`, 'success', 'fas fa-plus-circle');
+                        }
+                        transacoesModificadas[id - 1].categoria = nomeCategoria;
+                        select.value = nomeCategoria;
+                        select.closest('tr').dataset.categoria = nomeCategoria;
+                        atualizarEstatisticas();
+                        modalNovaCategoria.hide();
+                        mostrarMensagem(`Categoria "${nomeCategoria}" aplicada à transação ${id}.`, 'success', 'fas fa-check-circle');
+                    }
+                };
+            } else {
+                // Atualizar categoria da transação
+                transacoesModificadas[id - 1].categoria = novaCategoria;
+                select.closest('tr').dataset.categoria = novaCategoria;
+                atualizarEstatisticas();
+                mostrarMensagem(`Categoria "${novaCategoria}" aplicada à transação ${id}.`, 'success', 'fas fa-check-circle');
+            }
+        }
+    });
+
+    // Event listener para botões de dúvida
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('btn-duvida')) {
+            const id = e.target.dataset.id;
+            const duvidaTexto = prompt(`Digite a dúvida sobre a transação ${id}:`);
+            if (duvidaTexto && duvidaTexto.trim()) {
+                duvidas[id] = duvidaTexto.trim();
+                atualizarEstatisticas();
+                mostrarMensagem(`Dúvida adicionada à transação ${id}.`, 'warning', 'fas fa-question-circle');
+            }
+        }
+    });
+
+    // Função para atualizar todos os selects de categoria
+    function atualizarSelectsCategoria() {
+        const selects = document.querySelectorAll('.categoria-select');
+        selects.forEach(select => {
+            const valorAtual = select.value;
+            select.innerHTML = `
+                <option value="sem_categoria">Sem Categoria</option>
+                ${categoriasDisponiveis.map(cat =>
+                    `<option value="${cat}" ${valorAtual === cat ? 'selected' : ''}>${cat.charAt(0).toUpperCase() + cat.slice(1)}</option>`
+                ).join('')}
+                <option value="__nova">+ Nova Categoria</option>
+            `;
+        });
+
+        // Atualizar filtro de categoria
+        filtroCategoria.innerHTML = `
+            <option value="">Todas</option>
+            <option value="sem_categoria">Sem Categoria</option>
+            ${categoriasDisponiveis.map(cat =>
+                `<option value="${cat}">${cat.charAt(0).toUpperCase() + cat.slice(1)}</option>`
+            ).join('')}
+        `;
+    }
+
+
+
+    // Editar transação
+    document.querySelectorAll('.btn-editar').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = parseInt(this.dataset.id);
+            const transacao = transacoesModificadas[id - 1];
+
+            if (!transacao) {
+                console.error('Transação não encontrada para ID:', id);
+                mostrarMensagem('Erro: Transação não encontrada.', 'danger');
+                return;
+            }
+
+            document.getElementById('editData').value = transacao.data;
+            document.getElementById('editTipo').value = transacao.tipo;
+            document.getElementById('editDescricao').value = transacao.descricao;
+            document.getElementById('editValor').value = transacao.valor;
+            document.getElementById('editCategoria').value = transacao.categoria;
+
+            const modalEditar = new bootstrap.Modal(document.getElementById('modalEditarTransacao'));
+            modalEditar.show();
+
+            // Remover event listeners anteriores para evitar duplicação
+            const btnSalvar = document.getElementById('btnSalvarEdicao');
+            const newBtnSalvar = btnSalvar.cloneNode(true);
+            btnSalvar.parentNode.replaceChild(newBtnSalvar, btnSalvar);
+
+            // Adicionar novo event listener
+            newBtnSalvar.addEventListener('click', function() {
+                // Converter data do formato ISO para brasileiro
+                const dataISO = document.getElementById('editData').value; // formato YYYY-MM-DD
+                let dataBrasileira = dataISO;
+                if (dataISO && dataISO.includes('-')) {
+                    const partes = dataISO.split('-');
+                    if (partes.length === 3) {
+                        dataBrasileira = `${partes[2]}/${partes[1]}/${partes[0]}`;
+                    }
+                }
+                
+                transacao.data = dataBrasileira;
+                transacao.tipo = document.getElementById('editTipo').value;
+                transacao.descricao = document.getElementById('editDescricao').value;
+                transacao.valor = parseFloat(document.getElementById('editValor').value);
+                transacao.categoria = document.getElementById('editCategoria').value;
+
+                atualizarTabela();
+                modalEditar.hide();
+                mostrarMensagem('Transação editada com sucesso!', 'success');
+            });
+        });
+    });
+
+    // Adicionar nova categoria
+    document.getElementById('btnAdicionarCategoria').addEventListener('click', function() {
+        const nomeCategoria = document.getElementById('novaCategoriaNome').value.trim().toLowerCase();
+
+        if (!nomeCategoria) {
+            mostrarMensagem('Digite um nome para a categoria', 'warning');
+            return;
+        }
+
+        if (categoriasDisponiveis.includes(nomeCategoria)) {
+            mostrarMensagem('Esta categoria já existe', 'warning');
+            return;
+        }
+
+        categoriasDisponiveis.push(nomeCategoria);
+
+        // Atualizar selects de categoria
+        document.querySelectorAll('.categoria-select, #editCategoria').forEach(select => {
+            const option = document.createElement('option');
+            option.value = nomeCategoria;
+            option.textContent = nomeCategoria.charAt(0).toUpperCase() + nomeCategoria.slice(1);
+            select.appendChild(option);
+        });
+
+        document.getElementById('novaCategoriaNome').value = '';
+        modalNovaCategoria.hide();
+        mostrarMensagem(`Categoria "${nomeCategoria}" adicionada com sucesso!`, 'success');
+        atualizarEstatisticas();
+    });
+
+
+
+
+
+    // Confirmar integração
+    document.getElementById('btnConfirmarIntegracao').addEventListener('click', async function() {
+        try {
+            const response = await fetch('/salvar-categorias', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    transacoes: transacoesModificadas,
+                    novas_categorias: categoriasDisponiveis.filter(c => !{{ categorias_disponiveis|tojson }}.includes(c))
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                modalConfirmacao.hide();
+                mostrarMensagem(result.message, 'success');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 2000);
+            } else {
+                mostrarMensagem(result.message, 'danger');
+            }
+        } catch (error) {
+            mostrarMensagem('Erro ao salvar: ' + error.message, 'danger');
+        }
+    });
+
+    // Salvar e integrar
+    btnSalvar.addEventListener('click', function() {
+        const categorizadas = transacoesModificadas.filter(t => t.categoria && t.categoria !== 'sem_categoria');
+        const naoCategorizadas = transacoesModificadas.filter(t => !t.categoria || t.categoria === 'sem_categoria');
+
+        if (naoCategorizadas.length > 0) {
+            mostrarMensagem(`Atenção: ${naoCategorizadas.length} transação(ões) ainda sem categoria. Deseja continuar?`, 'warning', 'fas fa-exclamation-triangle');
+        }
+
+        document.getElementById('resumoTransacoes').innerHTML = `
+            ${transacoesModificadas.length} transações totais<br>
+            ${categorizadas.length} categorizadas<br>
+            ${naoCategorizadas.length} sem categoria<br>
+            ${Object.keys(duvidas).length} com dúvidas
+        `;
+
+        modalConfirmacao.show();
+        mostrarMensagem('Preparando integração das transações...', 'info', 'fas fa-cog');
+    });
+
+    // Confirmar integração
+    document.getElementById('btnConfirmarIntegracao').addEventListener('click', function() {
+        mostrarMensagem('Integrando transações ao sistema financeiro...', 'info', 'fas fa-spinner fa-spin');
+
+        // Enviar dados para integração
+        fetch('/integrar-transacoes', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                transacoes: transacoesModificadas,
+                novas_categorias: categoriasDisponiveis.filter(c => !{{ categorias_disponiveis|tojson }}.includes(c)),
+                duvidas: duvidas
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            modalConfirmacao.hide();
+            if (data.success) {
+                mostrarMensagem(`✅ ${data.message}`, 'success', 'fas fa-check-circle');
+                setTimeout(() => {
+                    window.location.href = '/extratos';
+                }, 2000);
+            } else {
+                mostrarMensagem(`❌ Erro na integração: ${data.message}`, 'danger', 'fas fa-times-circle');
+            }
+        })
+        .catch(error => {
+            modalConfirmacao.hide();
+            mostrarMensagem(`❌ Erro de conexão: ${error.message}`, 'danger', 'fas fa-times-circle');
+        });
+    });
+
+    // Cancelar
+    btnCancelar.addEventListener('click', function() {
+        const alteracoes = transacoesModificadas.filter((t, i) => t.categoria !== transacoesOriginais[i].categoria).length;
+        const mensagem = alteracoes > 0 ?
+            `Tem certeza que deseja cancelar? ${alteracoes} alteração(ões) não salva(s) será(ão) perdida(s).` :
+            'Tem certeza que deseja cancelar?';
+
+        if (confirm(mensagem)) {
+            mostrarMensagem('Cancelando revisão de categorias...', 'info', 'fas fa-times');
+            setTimeout(() => {
+                window.location.href = '/extratos';
+            }, 1000);
+        }
+    });
+
+    // Funcionalidade de ordenação
+    let sortColumn = null;
+    let sortDirection = 'asc';
+
+    // Função para adicionar event listeners de ordenação a uma tabela
+    function addSortListeners(table) {
+        table.querySelectorAll('.sortable').forEach(header => {
+            header.addEventListener('click', function() {
+                const column = this.dataset.column;
+                
+                // Toggle direction if same column, otherwise set to asc
+                if (sortColumn === column) {
+                    sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortColumn = column;
+                    sortDirection = 'asc';
+                }
+                
+                // Update sort icons in all tables
+                document.querySelectorAll('.sortable').forEach(h => {
+                    h.classList.remove('sort-asc', 'sort-desc');
+                });
+                document.querySelectorAll(`.sortable[data-column="${column}"]`).forEach(h => {
+                    h.classList.add(sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+                });
+                
+                // Sort all visible tables
+                document.querySelectorAll('#tabelaTransacoes tbody, .table-responsive table tbody').forEach(tbody => {
+                    if (tbody.offsetParent !== null) { // Check if visible
+                        sortTable(tbody, column, sortDirection);
+                    }
+                });
+            });
+        });
+    }
+
+    function sortTable(tbody, column, direction) {
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        rows.sort((a, b) => {
+            let aVal, bVal;
+            
+            switch(column) {
+                case 'tipo':
+                    aVal = a.dataset.tipo;
+                    bVal = b.dataset.tipo;
+                    break;
+                case 'data':
+                    aVal = a.querySelector('td:nth-child(4)').textContent.trim();
+                    bVal = b.querySelector('td:nth-child(4)').textContent.trim();
+                    // Parse date
+                    aVal = new Date(aVal.split('/').reverse().join('-'));
+                    bVal = new Date(bVal.split('/').reverse().join('-'));
+                    break;
+                case 'descricao':
+                    aVal = a.querySelector('td:nth-child(5)').textContent.trim().toLowerCase();
+                    bVal = b.querySelector('td:nth-child(5)').textContent.trim().toLowerCase();
+                    break;
+                case 'valor':
+                    aVal = parseFloat(a.querySelector('td:nth-child(6)').textContent.replace('R$ ', '').replace(',', '.'));
+                    bVal = parseFloat(b.querySelector('td:nth-child(6)').textContent.replace('R$ ', '').replace(',', '.'));
+                    break;
+                case 'categoria':
+                    aVal = a.dataset.categoria;
+                    bVal = b.dataset.categoria;
+                    break;
+                default:
+                    return 0;
+            }
+            
+            if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        
+        // Re-append sorted rows
+        rows.forEach(row => tbody.appendChild(row));
+        
+        // Update data-id attributes to maintain consistency
+        rows.forEach((row, index) => {
+            row.dataset.id = index + 1;
+            const checkbox = row.querySelector('.transacao-checkbox');
+            if (checkbox) {
+                checkbox.dataset.id = index + 1;
+            }
+            const numCell = row.querySelector('td:nth-child(2)');
+            if (numCell) {
+                numCell.textContent = index + 1;
+            }
+        });
+    }
+
+    // Adicionar listeners à tabela principal
+    addSortListeners(document.getElementById('tabelaTransacoes'));
+
+    // Inicializar
+    atualizarEstatisticas();
+});
+</script>
+{% endblock %}

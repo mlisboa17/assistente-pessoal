@@ -1,0 +1,83 @@
+{
+  "especificacao": "ETL Extratos Bancários v1.0",
+  "data_processamento": "2025-12-13T10:00:00Z",
+  "fonte": "pdf",
+  "extrato": {
+    "banco": "BANCO_DO_BRASIL",
+    "codigo_banco": "001",
+    "agencia": "1234",
+    "conta": "56789-0",
+    "tipo_conta": "corrente",
+    "titular": "João Silva",
+    "cpf_cnpj_titular": "12.345.678/0001-23",
+    "periodo": "01/11/2025 - 30/11/2025",
+    "data_extrato": "2025-12-01",
+    "saldo_anterior": 1500.00,
+    "saldo_atual": 1250.00,
+    "moeda": "BRL"
+  },
+  "transacoes_brutas": [
+    {
+      "linha_original": "31/10 31/10 Entrada PIX Recebido de MARIA S R$ 100,00",
+      "data_lancamento": "31/10/2025",
+      "data_movimento": "31/10/2025",
+      "tipo_operacao": "PIX",
+      "tipo_movimento": "CREDITO",
+      "descricao_completa": "PIX Recebido de MARIA S",
+      "valor_bruto": "R$ 100,00",
+      "valor_numerico": 100.00,
+      "contraparte": {
+        "nome": "MARIA S",
+        "cpf_cnpj": "",
+        "banco_origem": "",
+        "agencia_origem": "",
+        "conta_origem": ""
+      },
+      "categoria_sugerida": "transferencias",
+      "tags": ["pix", "recebimento"],
+      "documento": "",
+      "lote": "",
+      "historico_completo": "31/10 31/10 Entrada PIX Recebido de MARIA S R$ 100,00"
+    },
+    {
+      "linha_original": "01/11 01/11 Saída TED Enviada R$ 350,00",
+      "data_lancamento": "01/11/2025",
+      "data_movimento": "01/11/2025",
+      "tipo_operacao": "TED",
+      "tipo_movimento": "DEBITO",
+      "descricao_completa": "TED Enviada",
+      "valor_bruto": "R$ 350,00",
+      "valor_numerico": -350.00,
+      "contraparte": {
+        "nome": "",
+        "cpf_cnpj": "",
+        "banco_origem": "",
+        "agencia_origem": "",
+        "conta_origem": ""
+      },
+      "categoria_sugerida": "transferencias",
+      "tags": ["ted", "pagamento"],
+      "documento": "",
+      "lote": "",
+      "historico_completo": "01/11 01/11 Saída TED Enviada R$ 350,00"
+    }
+  ],
+  "metadados_extracao": {
+    "metodo_extracao": "regex_texto",
+    "bibliotecas_usadas": ["pdfplumber"],
+    "tempo_processamento_segundos": 2.5,
+    "total_linhas_processadas": 548,
+    "total_transacoes_extraidas": 2,
+    "taxa_sucesso_extracao": 0.95,
+    "erros_encontrados": [],
+    "avisos": ["Algumas datas assumidas como ano atual"]
+  },
+  "validacao_entrada": {
+    "campos_obrigatorios_preenchidos": true,
+    "datas_validas": true,
+    "valores_consistentes": true,
+    "formato_esperado": true,
+    "erros_validacao": [],
+    "status": "APTO_PARA_NORMALIZACAO"
+  }
+}

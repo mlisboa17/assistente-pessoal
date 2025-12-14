@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Assistente Pessoal{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="mb-0">
+                    <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+                </h1>
+                <p class="text-muted mb-0">Bem-vindo ao seu assistente pessoal inteligente!</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="/transacoes" class="btn btn-success">
+                    <i class="fas fa-list me-2"></i>Ver Transações
+                </a>
+                <a href="/upload-extrato" class="btn btn-primary">
+                    <i class="fas fa-upload me-2"></i>Upload Extrato
+                </a>
+                <a href="/revisao-categorias" class="btn btn-info">
+                    <i class="fas fa-edit me-2"></i>Revisar Categorias
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cards de Resumo -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <i class="fas fa-file-invoice-dollar fa-3x mb-3"></i>
+                <h5 class="card-title">{{ extratos_count }}</h5>
+                <p class="card-text">Extratos Processados</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <i class="fas fa-arrow-up fa-3x mb-3"></i>
+                <h5 class="card-title">R$ {{ total_entradas|number_format(2, ',', '.') }}</h5>
+                <p class="card-text">Total Entradas</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <i class="fas fa-arrow-down fa-3x mb-3"></i>
+                <h5 class="card-title">R$ {{ total_saidas|number_format(2, ',', '.') }}</h5>
+                <p class="card-text">Total Saídas</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <i class="fas fa-balance-scale fa-3x mb-3"></i>
+                <h5 class="card-title">R$ {{ saldo_atual|number_format(2, ',', '.') }}</h5>
+                <p class="card-text">Saldo Atual</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bancos Suportados -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fas fa-university me-2"></i>Bancos Suportados</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-2 col-sm-4 mb-3">
+                        <div class="text-center">
+                            <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                <i class="fas fa-piggy-bank fa-2x"></i>
+                            </div>
+                            <h6 class="mt-2">C6 Bank</h6>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-sm-4 mb-3">
+                        <div class="text-center">
+                            <div class="bg-success text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                <i class="fas fa-landmark fa-2x"></i>
+                            </div>
+                            <h6 class="mt-2">Banco do Brasil</h6>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-sm-4 mb-3">
+                        <div class="text-center">
+                            <div class="bg-info text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                <i class="fas fa-building fa-2x"></i>
+                            </div>
+                            <h6 class="mt-2">Itaú</h6>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-sm-4 mb-3">
+                        <div class="text-center">
+                            <div class="bg-warning text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                <i class="fas fa-credit-card fa-2x"></i>
+                            </div>
+                            <h6 class="mt-2">Santander</h6>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-sm-4 mb-3">
+                        <div class="text-center">
+                            <div class="bg-danger text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                <i class="fas fa-mobile-alt fa-2x"></i>
+                            </div>
+                            <h6 class="mt-2">PagSeguro</h6>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-sm-4 mb-3">
+                        <div class="text-center">
+                            <div class="bg-secondary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                <i class="fas fa-plus fa-2x"></i>
+                            </div>
+                            <h6 class="mt-2">+ Novos</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Últimas Atividades -->
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-history me-2"></i>Últimos Extratos
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if ultimos_extratos %}
+                    <div class="list-group list-group-flush">
+                        {% for extrato in ultimos_extratos %}
+                        <div class="list-group-item px-0">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ extrato.banco }}</strong>
+                                    <br>
+                                    <small class="text-muted">{{ extrato.transacoes|length }} transações</small>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-primary">{{ extrato.processado_em|strftime('%d/%m/%Y') }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">Nenhum extrato processado ainda.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-lightbulb me-2"></i>Ações Rápidas
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="/extratos" class="btn btn-primary">
+                        <i class="fas fa-upload me-2"></i>Processar Novo Extrato
+                    </a>
+                    <a href="/gastos" class="btn btn-outline-primary">
+                        <i class="fas fa-chart-bar me-2"></i>Ver Relatórios
+                    </a>
+                    <a href="/agenda" class="btn btn-outline-primary">
+                        <i class="fas fa-calendar-plus me-2"></i>Agendar Tarefa
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

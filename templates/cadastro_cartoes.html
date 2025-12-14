@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro de Cartões - Assistente Pessoal{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="mb-0">
+                    <i class="fas fa-credit-card me-2"></i>Cadastro de Cartões de Crédito
+                </h1>
+                <p class="text-muted mb-0">Gerencie cartões de crédito PF e PJ</p>
+            </div>
+            <div>
+                <a href="/cadastros" class="btn btn-outline-secondary me-2">
+                    <i class="fas fa-arrow-left me-2"></i>Voltar
+                </a>
+                <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#modalNovoCartao">
+                    <i class="fas fa-plus me-2"></i>Novo Cartão
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Lista de Cartões -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-credit-card me-2"></i>Cartões Cadastrados
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="tabelaCartoes">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Banco</th>
+                                <th>Bandeira</th>
+                                <th>Final</th>
+                                <th>Limite</th>
+                                <th>Titular</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Dados serão carregados via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>Estatísticas
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row text-center mb-3">
+                    <div class="col-12">
+                        <div class="h3 mb-0 text-warning" id="totalCartoes">0</div>
+                        <small class="text-muted">Total de Cartões</small>
+                    </div>
+                </div>
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="h5 mb-0 text-primary" id="cartoesPF">0</div>
+                        <small class="text-muted">PF</small>
+                    </div>
+                    <div class="col-6">
+                        <div class="h5 mb-0 text-success" id="cartoesPJ">0</div>
+                        <small class="text-muted">PJ</small>
+                    </div>
+                </div>
+                <hr>
+                <div class="text-center">
+                    <div class="h5 mb-0 text-info" id="limiteTotal">R$ 0,00</div>
+                    <small class="text-muted">Limite Total</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Novo Cartão -->
+<div class="modal fade" id="modalNovoCartao" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-credit-card me-2"></i>Novo Cartão de Crédito
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formNovoCartao">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="banco_id" class="form-label">Banco *</label>
+                            <select class="form-select" id="banco_id" name="banco_id" required>
+                                <option value="">Selecione um banco...</option>
+                                <option value="1">Banco do Brasil (001)</option>
+                                <option value="2">Itaú (341)</option>
+                                <option value="3">C6 (336)</option>
+                                <option value="4">Santander (033)</option>
+                                <option value="5">Bradesco (237)</option>
+                                <option value="6">Nubank (260)</option>
+                                <option value="7">Inter (077)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="nome" class="form-label">Nome do Cartão *</label>
+                            <input type="text" class="form-control" id="nome" name="nome" placeholder="Ex: Cartão Itaú Platinum" required>
+                            <div class="form-text">Nome identificador do cartão</div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="bandeira" class="form-label">Bandeira</label>
+                            <select class="form-select" id="bandeira" name="bandeira">
+                                <option value="">Selecione...</option>
+                                <option value="Visa">Visa</option>
+                                <option value="Mastercard">Mastercard</option>
+                                <option value="American Express">American Express</option>
+                                <option value="Elo">Elo</option>
+                                <option value="Hipercard">Hipercard</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="limite" class="form-label">Limite (R$)</label>
+                            <input type="number" class="form-control" id="limite" name="limite" step="0.01" placeholder="5000.00">
+                            <div class="form-text">Limite total do cartão</div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="ultimos_4_digitos" class="form-label">Últimos 4 Dígitos *</label>
+                            <input type="text" class="form-control" id="ultimos_4_digitos" name="ultimos_4_digitos" placeholder="1234" maxlength="4" required>
+                            <div class="form-text">Últimos 4 dígitos do cartão</div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label for="dia_fechamento" class="form-label">Dia Fechamento *</label>
+                            <input type="number" class="form-control" id="dia_fechamento" name="dia_fechamento" min="1" max="31" required>
+                            <div class="form-text">Dia do mês que fecha</div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="dia_vencimento" class="form-label">Dia Vencimento *</label>
+                            <input type="number" class="form-control" id="dia_vencimento" name="dia_vencimento" min="1" max="31" required>
+                            <div class="form-text">Dia do mês que vence</div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="validade_mes" class="form-label">Validade Mês</label>
+                            <input type="number" class="form-control" id="validade_mes" name="validade_mes" min="1" max="12" placeholder="12">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="validade_ano" class="form-label">Validade Ano</label>
+                            <input type="number" class="form-control" id="validade_ano" name="validade_ano" min="2024" max="2040" placeholder="2028">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3" id="divUsuarioCartao" style="display: none;">
+                            <label for="usuario_id" class="form-label">Titular PF</label>
+                            <select class="form-select" id="usuario_id" name="usuario_id">
+                                <option value="">Selecione um usuário...</option>
+                                <!-- Opções serão carregadas via JavaScript -->
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3" id="divEmpresaCartao" style="display: none;">
+                            <label for="empresa_id" class="form-label">Titular PJ</label>
+                            <select class="form-select" id="empresa_id" name="empresa_id">
+                                <option value="">Selecione uma empresa...</option>
+                                <!-- Opções serão carregadas via JavaScript -->
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Nota:</strong> O tipo de titular (PF/PJ) será determinado automaticamente baseado na seleção acima.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-save me-2"></i>Salvar Cartão
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Carregar cartões
+async function carregarCartoes() {
+    try {
+        // TODO: Implementar carregamento via API
+        const cartoes = []; // Dados mockados por enquanto
+
+        const tbody = document.querySelector('#tabelaCartoes tbody');
+        tbody.innerHTML = '';
+
+        if (cartoes.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-4">
+                        <i class="fas fa-credit-card fa-2x mb-3"></i>
+                        <br>Nenhum cartão cadastrado ainda
+                        <br><small>Clique em "Novo Cartão" para começar</small>
+                    </td>
+                </tr>
+            `;
+        } else {
+            cartoes.forEach(cartao => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${cartao.nome}</td>
+                    <td>${cartao.banco}</td>
+                    <td>${cartao.bandeira || '-'}</td>
+                    <td>****${cartao.ultimos_4_digitos}</td>
+                    <td>R$ ${cartao.limite.toFixed(2)}</td>
+                    <td>${cartao.titular}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-warning me-1" onclick="editarCartao(${cartao.id})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="excluirCartao(${cartao.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Atualizar estatísticas
+        const cartoesPF = cartoes.filter(c => c.tipo === 'PF').length;
+        const cartoesPJ = cartoes.filter(c => c.tipo === 'PJ').length;
+        const limiteTotal = cartoes.reduce((sum, c) => sum + (c.limite || 0), 0);
+
+        document.getElementById('totalCartoes').textContent = cartoes.length;
+        document.getElementById('cartoesPF').textContent = cartoesPF;
+        document.getElementById('cartoesPJ').textContent = cartoesPJ;
+        document.getElementById('limiteTotal').textContent = `R$ ${limiteTotal.toFixed(2)}`;
+
+    } catch (error) {
+        console.error('Erro ao carregar cartões:', error);
+    }
+}
+
+// Carregar usuários e empresas
+async function carregarUsuariosEmpresas() {
+    try {
+        // TODO: Implementar carregamento via API
+        const usuarios = [
+            {id: 1, nome: 'João Silva'},
+            {id: 2, nome: 'Maria Santos'}
+        ];
+
+        const empresas = [
+            {id: 1, nome: 'Empresa XYZ Ltda'},
+            {id: 2, nome: 'Comércio ABC S.A.'}
+        ];
+
+        // Preencher select de usuários
+        const selectUsuario = document.getElementById('usuario_id');
+        usuarios.forEach(usuario => {
+            const option = document.createElement('option');
+            option.value = usuario.id;
+            option.textContent = usuario.nome;
+            selectUsuario.appendChild(option);
+        });
+
+        // Preencher select de empresas
+        const selectEmpresa = document.getElementById('empresa_id');
+        empresas.forEach(empresa => {
+            const option = document.createElement('option');
+            option.value = empresa.id;
+            option.textContent = empresa.nome;
+            selectEmpresa.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Erro ao carregar usuários/empresas:', error);
+    }
+}
+
+// Processar validade antes de enviar
+function processarValidade() {
+    const mes = document.getElementById('validade_mes').value;
+    const ano = document.getElementById('validade_ano').value;
+
+    if (mes && ano) {
+        document.getElementById('validade_mes_ano').value = `${mes.toString().padStart(2, '0')}/${ano}`;
+    }
+}
+
+// Salvar novo cartão
+document.getElementById('formNovoCartao').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    // Processar validade
+    processarValidade();
+
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+
+    try {
+        const response = await fetch('/api/cartoes', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert('Cartão criado com sucesso!');
+            bootstrap.Modal.getInstance(document.getElementById('modalNovoCartao')).hide();
+            this.reset();
+            carregarCartoes();
+        } else {
+            alert('Erro: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao salvar cartão');
+    }
+});
+
+// Funções de edição e exclusão (placeholders)
+function editarCartao(id) {
+    alert('Função de edição será implementada');
+}
+
+function excluirCartao(id) {
+    if (confirm('Tem certeza que deseja excluir este cartão?')) {
+        alert('Função de exclusão será implementada');
+    }
+}
+
+// Inicializar
+document.addEventListener('DOMContentLoaded', function() {
+    carregarCartoes();
+    carregarUsuariosEmpresas();
+});
+</script>
+{% endblock %}

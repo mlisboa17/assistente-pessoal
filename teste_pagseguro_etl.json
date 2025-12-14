@@ -1,0 +1,87 @@
+{
+  "especificacao": "ETL Extratos Bancários v1.0",
+  "data_processamento": "2025-12-13T23:30:32.195696",
+  "fonte": "pdf",
+  "extrato": {
+    "banco": "PAGSEGURO",
+    "codigo_banco": "",
+    "agencia": "0001",
+    "conta": "123456-7",
+    "tipo_conta": "corrente",
+    "titular": "João Silva",
+    "cpf_cnpj_titular": "",
+    "periodo": "01/11/2025 - 30/11/2025",
+    "data_extrato": "2025-12-13",
+    "saldo_anterior": 2500.0,
+    "saldo_atual": 1800.0,
+    "moeda": "BRL"
+  },
+  "transacoes_brutas": [
+    {
+      "linha_original": "",
+      "data_lancamento": "",
+      "data_movimento": "",
+      "tipo_operacao": "sem_categoria",
+      "tipo_movimento": "CREDITO",
+      "descricao_completa": "",
+      "valor_bruto": "R$ 0.00",
+      "valor_numerico": 0.0,
+      "categoria_sugerida": "sem_categoria",
+      "tags": [],
+      "historico_completo": ""
+    },
+    {
+      "linha_original": "",
+      "data_lancamento": "",
+      "data_movimento": "",
+      "tipo_operacao": "sem_categoria",
+      "tipo_movimento": "CREDITO",
+      "descricao_completa": "",
+      "valor_bruto": "R$ 0.00",
+      "valor_numerico": 0.0,
+      "categoria_sugerida": "sem_categoria",
+      "tags": [],
+      "historico_completo": ""
+    },
+    {
+      "linha_original": "",
+      "data_lancamento": "",
+      "data_movimento": "",
+      "tipo_operacao": "sem_categoria",
+      "tipo_movimento": "CREDITO",
+      "descricao_completa": "",
+      "valor_bruto": "R$ 0.00",
+      "valor_numerico": 0.0,
+      "categoria_sugerida": "sem_categoria",
+      "tags": [],
+      "historico_completo": ""
+    },
+    {
+      "linha_original": "",
+      "data_lancamento": "",
+      "data_movimento": "",
+      "tipo_operacao": "sem_categoria",
+      "tipo_movimento": "CREDITO",
+      "descricao_completa": "",
+      "valor_bruto": "R$ 0.00",
+      "valor_numerico": 0.0,
+      "categoria_sugerida": "sem_categoria",
+      "tags": [],
+      "historico_completo": ""
+    }
+  ],
+  "metadados_extracao": {
+    "metodo_extracao": "simulado",
+    "tempo_processamento_segundos": 0.1,
+    "total_transacoes_extraidas": 4,
+    "taxa_sucesso_extracao": 1.0
+  },
+  "validacao_entrada": {
+    "campos_obrigatorios_preenchidos": true,
+    "datas_validas": true,
+    "valores_consistentes": true,
+    "formato_esperado": true,
+    "erros_validacao": [],
+    "status": "APTO_PARA_NORMALIZACAO"
+  }
+}

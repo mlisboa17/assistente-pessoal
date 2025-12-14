@@ -1,0 +1,39 @@
+{
+  "banco": "SANTANDER",
+  "agencia": "1234",
+  "conta": "56789-0",
+  "titular": "João Silva",
+  "periodo": "01/12/2025 - 31/12/2025",
+  "saldo_anterior": 5000.0,
+  "saldo_atual": 3200.0,
+  "transacoes": [
+    {
+      "data": "05/12/2025",
+      "descricao": "PIX ENVIADO PARA MARIA SANTOS",
+      "valor": -500.0,
+      "tipo": "debito",
+      "categoria_sugerida": "transferencias"
+    },
+    {
+      "data": "10/12/2025",
+      "descricao": "RECEBIMENTO SALARIO EMPRESA XYZ",
+      "valor": 2500.0,
+      "tipo": "credito",
+      "categoria_sugerida": "salario"
+    },
+    {
+      "data": "15/12/2025",
+      "descricao": "PAGAMENTO BOLETO LUZ",
+      "valor": -150.0,
+      "tipo": "debito",
+      "categoria_sugerida": "contas_pagas"
+    },
+    {
+      "data": "20/12/2025",
+      "descricao": "PIX RECEBIDO DE JOAO CARLOS",
+      "valor": 800.0,
+      "tipo": "credito",
+      "categoria_sugerida": "transferencias"
+    }
+  ]
+}

@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Extratos - Assistente Pessoal{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1 class="mb-0">
+                <i class="fas fa-file-invoice-dollar me-2"></i>Extratos Bancários
+            </h1>
+            <a href="/upload-extrato" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Novo Extrato
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-3">
+                <label for="banco" class="form-label">Banco</label>
+                <select class="form-select" id="banco" name="banco">
+                    <option value="">Todos</option>
+                    <option value="ITAU">Itaú</option>
+                    <option value="BRADESCO">Bradesco</option>
+                    <option value="SANTANDER">Santander</option>
+                    <option value="CAIXA">Caixa Econômica</option>
+                    <option value="BB">Banco do Brasil</option>
+                    <option value="NUBANK">Nubank</option>
+                    <option value="INTER">Banco Inter</option>
+                    <option value="C6">C6 Bank</option>
+                    <option value="NEXT">Next</option>
+                    <option value="ORIGINAL">Banco Original</option>
+                    <option value="PAN">Banco Pan</option>
+                    <option value="BMG">Banco BMG</option>
+                    <option value="DIGIO">Digio</option>
+                    <option value="PAGBANK">PagBank</option>
+                    <option value="MERCADOPAGO">Mercado Pago</option>
+                    <option value="OUTROS">Outros</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="periodo" class="form-label">Período</label>
+                <select class="form-select" id="periodo" name="periodo">
+                    <option value="">Todos</option>
+                    <option value="7">Última semana</option>
+                    <option value="30">Último mês</option>
+                    <option value="90">Últimos 3 meses</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="tipo" class="form-label">Tipo</label>
+                <select class="form-select" id="tipo" name="tipo">
+                    <option value="">Todos</option>
+                    <option value="credito">Créditos</option>
+                    <option value="debito">Débitos</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="busca" class="form-label">Buscar</label>
+                <input type="text" class="form-control" id="busca" name="busca" placeholder="Descrição, titular...">
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-outline-primary me-2">
+                    <i class="fas fa-filter me-1"></i>Filtrar
+                </button>
+                <a href="/extratos" class="btn btn-outline-secondary">
+                    <i class="fas fa-times me-1"></i>Limpar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Lista de Extratos -->
+<div class="row">
+    {% if extratos %}
+        {% for extrato in extratos %}
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-university me-2"></i>{{ extrato.banco }}
+                        </h5>
+                        <span class="badge bg-primary">{{ extrato.processado_em|strftime('%d/%m/%Y') }}</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <small class="text-muted">Agência</small>
+                            <p class="mb-0">{{ extrato.agencia or 'N/A' }}</p>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">Conta</small>
+                            <p class="mb-0">{{ extrato.conta or 'N/A' }}</p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <small class="text-muted">Transações</small>
+                            <p class="mb-0 fw-bold">{{ extrato.transacoes|length }}</p>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">Saldo Atual</small>
+                            <p class="mb-0 fw-bold text-success">
+                                R$ {{ extrato.saldo_atual|number_format(2, ',', '.') }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <a href="/extrato/{{ extrato.id }}" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-eye me-1"></i>Ver Detalhes
+                        </a>
+                        <a href="/extrato/{{ extrato.id }}/exportar" class="btn btn-outline-secondary btn-sm">
+                            <i class="fas fa-download me-1"></i>Exportar
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-file-invoice-dollar fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">Nenhum extrato encontrado</h5>
+                    <p class="text-muted mb-4">Comece processando seu primeiro extrato bancário.</p>
+                    <a href="/upload-extrato" class="btn btn-primary">
+                        <i class="fas fa-plus me-2"></i>Processar Primeiro Extrato
+                    </a>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Paginação -->
+{% if extratos and extratos|length > 10 %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="Paginação">
+            <ul class="pagination justify-content-center">
+                <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1">Anterior</a>
+                </li>
+                <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                <li class="page-item"><a class="page-link" href="#">2</a></li>
+                <li class="page-item"><a class="page-link" href="#">3</a></li>
+                <li class="page-item">
+                    <a class="page-link" href="#">Próximo</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

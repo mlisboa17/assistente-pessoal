@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}Revisão Assistida de Categorias - Assistente Pessoal{% endblock %}
+
+{% block content %}
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-magic me-2"></i>Assistente de Revisão de Categorias
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Seleção de Extrato -->
+                        <div id="selecaoExtrato" class="mb-4">
+                            <h6>1. Selecione o Extrato para Revisar</h6>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label for="bancoSelecionado" class="form-label">Banco</label>
+                                    <select class="form-select" id="bancoSelecionado">
+                                        <option value="">Selecione um banco...</option>
+                                        {% for banco in bancos_disponiveis %}
+                                        <option value="{{ banco }}">{{ banco }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="dataInicio" class="form-label">Data Início</label>
+                                    <input type="date" class="form-control" id="dataInicio">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="dataFim" class="form-label">Data Fim</label>
+                                    <input type="date" class="form-control" id="dataFim">
+                                </div>
+                                <div class="col-md-2 d-flex align-items-end">
+                                    <button id="btnCarregarExtrato" class="btn btn-primary w-100">
+                                        <i class="fas fa-search me-1"></i>Carregar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Revisão Passo a Passo -->
+                        <div id="revisaoPassoAPasso" style="display: none;">
+                            <h6>2. Revisão Passo a Passo</h6>
+                            <div class="progress mb-3">
+                                <div id="barraProgresso" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div id="transacaoAtual" class="card border-primary">
+                                        <div class="card-body">
+                                            <h6 class="card-title">Transação Atual</h6>
+                                            <div id="detalhesTransacao">
+                                                <!-- Detalhes serão carregados aqui -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h6 class="card-title">Categorizar</h6>
+                                            <div class="mb-3">
+                                                <label for="categoriaSelecionada" class="form-label">Categoria</label>
+                                                <select class="form-select" id="categoriaSelecionada">
+                                                    <option value="">Selecione...</option>
+                                                    <option value="alimentacao">Alimentação</option>
+                                                    <option value="transporte">Transporte</option>
+                                                    <option value="lazer">Lazer</option>
+                                                    <option value="saude">Saúde</option>
+                                                    <option value="educacao">Educação</option>
+                                                    <option value="compras">Compras</option>
+                                                    <option value="transferencias">Transferências</option>
+                                                    <option value="outros">Outros</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="tipoSelecionado" class="form-label">Tipo</label>
+                                                <select class="form-select" id="tipoSelecionado">
+                                                    <option value="entrada">Entrada</option>
+                                                    <option value="saida">Saída</option>
+                                                </select>
+                                            </div>
+                                            <div class="d-grid gap-2">
+                                                <button id="btnAplicarCategoria" class="btn btn-success">
+                                                    <i class="fas fa-check me-1"></i>Aplicar e Próxima
+                                                </button>
+                                                <button id="btnPular" class="btn btn-warning">
+                                                    <i class="fas fa-forward me-1"></i>Pular
+                                                </button>
+                                                <button id="btnVoltar" class="btn btn-secondary">
+                                                    <i class="fas fa-arrow-left me-1"></i>Voltar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Resumo Final -->
+                        <div id="resumoFinal" style="display: none;">
+                            <h6>3. Resumo da Revisão</h6>
+                            <div class="alert alert-success">
+                                <h6>Revisão Concluída!</h6>
+                                <p id="estatisticasRevisao"></p>
+                                <button id="btnSalvarRevisao" class="btn btn-primary">
+                                    <i class="fas fa-save me-1"></i>Salvar Alterações
+                                </button>
+                                <button id="btnNovaRevisao" class="btn btn-outline-primary ms-2">
+                                    <i class="fas fa-plus me-1"></i>Nova Revisão
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação -->
+    <div class="modal fade" id="modalConfirmacao" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirmar Ação</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="conteudoModal">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnConfirmarModal">Confirmar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        let transacoesExtrato = [];
+        let indiceAtual = 0;
+        let categoriasAplicadas = [];
+
+        document.getElementById('btnCarregarExtrato').addEventListener('click', carregarExtrato);
+        document.getElementById('btnAplicarCategoria').addEventListener('click', aplicarCategoria);
+        document.getElementById('btnPular').addEventListener('click', proximaTransacao);
+        document.getElementById('btnVoltar').addEventListener('click', transacaoAnterior);
+        document.getElementById('btnSalvarRevisao').addEventListener('click', salvarRevisao);
+        document.getElementById('btnNovaRevisao').addEventListener('click', novaRevisao);
+
+        async function carregarExtrato() {
+            const banco = document.getElementById('bancoSelecionado').value;
+            const dataInicio = document.getElementById('dataInicio').value;
+            const dataFim = document.getElementById('dataFim').value;
+
+            if (!banco || !dataInicio || !dataFim) {
+                alert('Por favor, selecione o banco e as datas.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/transacoes?banco=${banco}&data_inicio=${dataInicio}&data_fim=${dataFim}`);
+                const data = await response.json();
+
+                transacoesExtrato = data.transacoes;
+                indiceAtual = 0;
+                categoriasAplicadas = [];
+
+                document.getElementById('selecaoExtrato').style.display = 'none';
+                document.getElementById('revisaoPassoAPasso').style.display = 'block';
+
+                mostrarTransacaoAtual();
+                atualizarProgresso();
+            } catch (error) {
+                console.error('Erro ao carregar extrato:', error);
+                alert('Erro ao carregar o extrato. Tente novamente.');
+            }
+        }
+
+        function mostrarTransacaoAtual() {
+            if (indiceAtual >= transacoesExtrato.length) {
+                mostrarResumo();
+                return;
+            }
+
+            const transacao = transacoesExtrato[indiceAtual];
+            const detalhesDiv = document.getElementById('detalhesTransacao');
+
+            detalhesDiv.innerHTML = `
+                <div class="mb-3">
+                    <strong>Data:</strong> ${transacao.data}
+                </div>
+                <div class="mb-3">
+                    <strong>Descrição:</strong> ${transacao.descricao}
+                </div>
+                <div class="mb-3">
+                    <strong>Valor:</strong> R$ ${transacao.valor.toFixed(2)}
+                </div>
+                <div class="mb-3">
+                    <strong>Tipo Atual:</strong> ${transacao.tipo}
+                </div>
+                <div class="mb-3">
+                    <strong>Categoria Atual:</strong> ${transacao.categoria || 'Não categorizada'}
+                </div>
+            `;
+
+            // Pre-selecionar valores atuais
+            document.getElementById('categoriaSelecionada').value = transacao.categoria || '';
+            document.getElementById('tipoSelecionado').value = transacao.tipo;
+        }
+
+        function aplicarCategoria() {
+            const categoria = document.getElementById('categoriaSelecionada').value;
+            const tipo = document.getElementById('tipoSelecionado').value;
+
+            if (!categoria) {
+                alert('Por favor, selecione uma categoria.');
+                return;
+            }
+
+            const transacao = transacoesExtrato[indiceAtual];
+            categoriasAplicadas.push({
+                id: transacao.id,
+                categoria: categoria,
+                tipo: tipo
+            });
+
+            proximaTransacao();
+        }
+
+        function proximaTransacao() {
+            indiceAtual++;
+            mostrarTransacaoAtual();
+            atualizarProgresso();
+        }
+
+        function transacaoAnterior() {
+            if (indiceAtual > 0) {
+                indiceAtual--;
+                mostrarTransacaoAtual();
+                atualizarProgresso();
+            }
+        }
+
+        function atualizarProgresso() {
+            const progresso = ((indiceAtual + 1) / transacoesExtrato.length) * 100;
+            document.getElementById('barraProgresso').style.width = `${progresso}%`;
+            document.getElementById('barraProgresso').textContent = `${indiceAtual + 1}/${transacoesExtrato.length}`;
+        }
+
+        function mostrarResumo() {
+            document.getElementById('revisaoPassoAPasso').style.display = 'none';
+            document.getElementById('resumoFinal').style.display = 'block';
+
+            const estatisticas = `Total de transações revisadas: ${categoriasAplicadas.length}`;
+            document.getElementById('estatisticasRevisao').textContent = estatisticas;
+        }
+
+        async function salvarRevisao() {
+            try {
+                const response = await fetch('/api/salvar-categorias', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ categorias: categoriasAplicadas }),
+                });
+
+                if (response.ok) {
+                    alert('Revisão salva com sucesso!');
+                    novaRevisao();
+                } else {
+                    alert('Erro ao salvar a revisão.');
+                }
+            } catch (error) {
+                console.error('Erro ao salvar:', error);
+                alert('Erro ao salvar a revisão.');
+            }
+        }
+
+        function novaRevisao() {
+            document.getElementById('selecaoExtrato').style.display = 'block';
+            document.getElementById('revisaoPassoAPasso').style.display = 'none';
+            document.getElementById('resumoFinal').style.display = 'none';
+            transacoesExtrato = [];
+            indiceAtual = 0;
+            categoriasAplicadas = [];
+            document.getElementById('bancoSelecionado').value = '';
+            document.getElementById('dataInicio').value = '';
+            document.getElementById('dataFim').value = '';
+        }
+    </script>
+{% endblock %}

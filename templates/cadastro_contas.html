@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro de Contas - Assistente Pessoal{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="mb-0">
+                    <i class="fas fa-university me-2"></i>Cadastro de Contas Bancárias
+                </h1>
+                <p class="text-muted mb-0">Gerencie contas correntes PF e PJ</p>
+            </div>
+            <div>
+                <a href="/cadastros" class="btn btn-outline-secondary me-2">
+                    <i class="fas fa-arrow-left me-2"></i>Voltar
+                </a>
+                <button class="btn btn-info" data-bs-toggle="modal" data-bs-target="#modalNovaConta">
+                    <i class="fas fa-plus me-2"></i>Nova Conta
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Lista de Contas -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-university me-2"></i>Contas Cadastradas
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="tabelaContas">
+                        <thead>
+                            <tr>
+                                <th>Banco</th>
+                                <th>Agência</th>
+                                <th>Conta</th>
+                                <th>Tipo</th>
+                                <th>Titular</th>
+                                <th>Saldo</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Dados serão carregados via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>Estatísticas
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row text-center mb-3">
+                    <div class="col-12">
+                        <div class="h3 mb-0 text-info" id="totalContas">0</div>
+                        <small class="text-muted">Total de Contas</small>
+                    </div>
+                </div>
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="h5 mb-0 text-primary" id="contasPF">0</div>
+                        <small class="text-muted">PF</small>
+                    </div>
+                    <div class="col-6">
+                        <div class="h5 mb-0 text-success" id="contasPJ">0</div>
+                        <small class="text-muted">PJ</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nova Conta -->
+<div class="modal fade" id="modalNovaConta" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-university me-2"></i>Nova Conta Bancária
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formNovaConta">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="banco_id" class="form-label">Banco *</label>
+                            <select class="form-select" id="banco_id" name="banco_id" required>
+                                <option value="">Selecione um banco...</option>
+                                <option value="1">Banco do Brasil (001)</option>
+                                <option value="2">Itaú (341)</option>
+                                <option value="3">C6 (336)</option>
+                                <option value="4">Santander (033)</option>
+                                <option value="5">Bradesco (237)</option>
+                                <option value="6">Nubank (260)</option>
+                                <option value="7">Inter (077)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="tipo_conta" class="form-label">Tipo de Conta *</label>
+                            <select class="form-select" id="tipo_conta" name="tipo_conta" required onchange="toggleTitular()">
+                                <option value="">Selecione...</option>
+                                <option value="PF">Pessoa Física</option>
+                                <option value="PJ">Pessoa Jurídica</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="agencia" class="form-label">Agência</label>
+                            <input type="text" class="form-control" id="agencia" name="agencia" placeholder="0000">
+                            <div class="form-text">Agência da conta</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="conta_corrente" class="form-label">Conta Corrente *</label>
+                            <input type="text" class="form-control" id="conta_corrente" name="conta_corrente" placeholder="00000-0" required>
+                            <div class="form-text">Número da conta corrente</div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3" id="divUsuario" style="display: none;">
+                            <label for="usuario_id" class="form-label">Titular PF</label>
+                            <select class="form-select" id="usuario_id" name="usuario_id">
+                                <option value="">Selecione um usuário...</option>
+                                <!-- Opções serão carregadas via JavaScript -->
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3" id="divEmpresa" style="display: none;">
+                            <label for="empresa_id" class="form-label">Titular PJ</label>
+                            <select class="form-select" id="empresa_id" name="empresa_id">
+                                <option value="">Selecione uma empresa...</option>
+                                <!-- Opções serão carregadas via JavaScript -->
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="saldo" class="form-label">Saldo Inicial</label>
+                            <input type="number" class="form-control" id="saldo" name="saldo" step="0.01" value="0.00">
+                            <div class="form-text">Saldo atual da conta</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-info">
+                        <i class="fas fa-save me-2"></i>Salvar Conta
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Carregar contas
+async function carregarContas() {
+    try {
+        // TODO: Implementar carregamento via API
+        const contas = []; // Dados mockados por enquanto
+
+        const tbody = document.querySelector('#tabelaContas tbody');
+        tbody.innerHTML = '';
+
+        if (contas.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-4">
+                        <i class="fas fa-university fa-2x mb-3"></i>
+                        <br>Nenhuma conta cadastrada ainda
+                        <br><small>Clique em "Nova Conta" para começar</small>
+                    </td>
+                </tr>
+            `;
+        } else {
+            contas.forEach(conta => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${conta.banco}</td>
+                    <td>${conta.agencia || '-'}</td>
+                    <td>${conta.conta_corrente}</td>
+                    <td><span class="badge bg-${conta.tipo_conta === 'PF' ? 'primary' : 'success'}">${conta.tipo_conta}</span></td>
+                    <td>${conta.titular}</td>
+                    <td>R$ ${conta.saldo.toFixed(2)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-info me-1" onclick="editarConta(${conta.id})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="excluirConta(${conta.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Atualizar estatísticas
+        const contasPF = contas.filter(c => c.tipo_conta === 'PF').length;
+        const contasPJ = contas.filter(c => c.tipo_conta === 'PJ').length;
+
+        document.getElementById('totalContas').textContent = contas.length;
+        document.getElementById('contasPF').textContent = contasPF;
+        document.getElementById('contasPJ').textContent = contasPJ;
+
+    } catch (error) {
+        console.error('Erro ao carregar contas:', error);
+    }
+}
+
+// Toggle entre PF e PJ
+function toggleTitular() {
+    const tipo = document.getElementById('tipo_conta').value;
+    const divUsuario = document.getElementById('divUsuario');
+    const divEmpresa = document.getElementById('divEmpresa');
+
+    if (tipo === 'PF') {
+        divUsuario.style.display = 'block';
+        divEmpresa.style.display = 'none';
+        document.getElementById('empresa_id').value = '';
+    } else if (tipo === 'PJ') {
+        divUsuario.style.display = 'none';
+        divEmpresa.style.display = 'block';
+        document.getElementById('usuario_id').value = '';
+    } else {
+        divUsuario.style.display = 'none';
+        divEmpresa.style.display = 'none';
+    }
+}
+
+// Carregar usuários e empresas
+async function carregarUsuariosEmpresas() {
+    try {
+        // TODO: Implementar carregamento via API
+        const usuarios = [
+            {id: 1, nome: 'João Silva'},
+            {id: 2, nome: 'Maria Santos'}
+        ];
+
+        const empresas = [
+            {id: 1, nome: 'Empresa XYZ Ltda'},
+            {id: 2, nome: 'Comércio ABC S.A.'}
+        ];
+
+        // Preencher select de usuários
+        const selectUsuario = document.getElementById('usuario_id');
+        usuarios.forEach(usuario => {
+            const option = document.createElement('option');
+            option.value = usuario.id;
+            option.textContent = usuario.nome;
+            selectUsuario.appendChild(option);
+        });
+
+        // Preencher select de empresas
+        const selectEmpresa = document.getElementById('empresa_id');
+        empresas.forEach(empresa => {
+            const option = document.createElement('option');
+            option.value = empresa.id;
+            option.textContent = empresa.nome;
+            selectEmpresa.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Erro ao carregar usuários/empresas:', error);
+    }
+}
+
+// Salvar nova conta
+document.getElementById('formNovaConta').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+
+    try {
+        const response = await fetch('/api/contas', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert('Conta criada com sucesso!');
+            bootstrap.Modal.getInstance(document.getElementById('modalNovaConta')).hide();
+            this.reset();
+            carregarContas();
+        } else {
+            alert('Erro: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao salvar conta');
+    }
+});
+
+// Funções de edição e exclusão (placeholders)
+function editarConta(id) {
+    alert('Função de edição será implementada');
+}
+
+function excluirConta(id) {
+    if (confirm('Tem certeza que deseja excluir esta conta?')) {
+        alert('Função de exclusão será implementada');
+    }
+}
+
+// Inicializar
+document.addEventListener('DOMContentLoaded', function() {
+    carregarContas();
+    carregarUsuariosEmpresas();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,57 @@
+{
+  "especificacao": "ETL Extratos Bancários v1.0",
+  "data_processamento": "2025-12-13T10:00:00Z",
+  "fonte": "pdf",
+  "extrato": {
+    "banco": "BANCO_DO_BRASIL",
+    "agencia": "1234",
+    "conta": "56789-0",
+    "titular": "João Silva",
+    "periodo": "01/11/2025 - 30/11/2025",
+    "saldo_anterior": 1500.0,
+    "saldo_atual": 1250.0
+  },
+  "transacoes_brutas": [
+    {
+      "linha_original": "31/10 31/10 Entrada PIX Recebido de MARIA S R$ 100,00",
+      "data_lancamento": "31/10/2025",
+      "data_movimento": "31/10/2025",
+      "tipo_operacao": "PIX",
+      "tipo_movimento": "CREDITO",
+      "descricao_completa": "PIX Recebido de MARIA S",
+      "valor_bruto": "R$ 100,00",
+      "valor_numerico": 100.0,
+      "categoria_sugerida": "transferencias",
+      "tags": [
+        "pix",
+        "recebimento"
+      ],
+      "historico_completo": "31/10 31/10 Entrada PIX Recebido de MARIA S R$ 100,00"
+    },
+    {
+      "linha_original": "01/11 01/11 Saída TED Enviada R$ 350,00",
+      "data_lancamento": "01/11/2025",
+      "data_movimento": "01/11/2025",
+      "tipo_operacao": "TED",
+      "tipo_movimento": "DEBITO",
+      "descricao_completa": "TED Enviada",
+      "valor_bruto": "R$ 350,00",
+      "valor_numerico": -350.0,
+      "categoria_sugerida": "transferencias",
+      "tags": [
+        "ted",
+        "pagamento"
+      ],
+      "historico_completo": "01/11 01/11 Saída TED Enviada R$ 350,00"
+    }
+  ],
+  "metadados_extracao": {
+    "metodo_extracao": "regex_texto",
+    "tempo_processamento_segundos": 1.2,
+    "total_transacoes_extraidas": 2,
+    "taxa_sucesso_extracao": 1.0
+  },
+  "validacao_entrada": {
+    "status": "APTO_PARA_NORMALIZACAO"
+  }
+}

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Assistente Pessoal{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/style.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,.75);
+            transition: all 0.3s;
+        }
+        .sidebar .nav-link:hover {
+            color: white;
+            background-color: rgba(255,255,255,.1);
+        }
+        .sidebar .nav-link.active {
+            color: white;
+            background-color: rgba(255,255,255,.2);
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+        .sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+        .sortable:hover {
+            background-color: rgba(0,0,0,0.05);
+        }
+        .sort-icon {
+            margin-left: 5px;
+            opacity: 0.5;
+        }
+        .sortable.sort-asc .sort-icon:before {
+            content: "\f145"; /* fa-sort-up */
+        }
+        .sortable.sort-desc .sort-icon:before {
+            content: "\f144"; /* fa-sort-down */
+        }
+        .sortable.sort-asc .sort-icon,
+        .sortable.sort-desc .sort-icon {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 px-0 sidebar">
+                <div class="d-flex flex-column p-3">
+                    <h5 class="mb-4">
+                        <i class="fas fa-robot me-2"></i>
+                        Assistente Pessoal
+                    </h5>
+                    <nav class="nav nav-pills flex-column">
+                        <a class="nav-link active" href="/">
+                            <i class="fas fa-home me-2"></i>Dashboard
+                        </a>
+                        <a class="nav-link" href="/extratos">
+                            <i class="fas fa-file-invoice-dollar me-2"></i>Extratos
+                        </a>
+                        <a class="nav-link" href="/revisao-categorias">
+                            <i class="fas fa-edit me-2"></i>Revisão Categorias
+                        </a>
+                        <a class="nav-link" href="/revisao-assistente">
+                            <i class="fas fa-magic me-2"></i>Revisão Assistida
+                        </a>
+                        <a class="nav-link" href="/gastos">
+                            <i class="fas fa-chart-pie me-2"></i>Gastos
+                        </a>
+                        <a class="nav-link" href="/agenda">
+                            <i class="fas fa-calendar me-2"></i>Agenda
+                        </a>
+                        <a class="nav-link" href="/emails">
+                            <i class="fas fa-envelope me-2"></i>E-mails
+                        </a>
+                        <a class="nav-link" href="/tarefas">
+                            <i class="fas fa-tasks me-2"></i>Tarefas
+                        </a>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-9 col-lg-10 px-4 py-4">
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,140 @@
+{
+  "banco": "PAGSEGURO",
+  "agencia": "0001",
+  "conta": "123456-7",
+  "titular": "João Silva",
+  "periodo": "01/11/2025 - 30/11/2025",
+  "saldo_anterior": 2500.0,
+  "saldo_atual": 1800.0,
+  "data_processamento": "2025-12-13T23:30:32.187714",
+  "fonte": "pdf",
+  "transacoes": [
+    "TransacaoNormalizada(id='PAGSEGURO_8e3143d9868c', data='', descricao='', valor=0.0, tipo='ENTRADA', categoria='sem_categoria', subcategoria='', banco='pagseguro', conta='', agencia='', documento='', lote='', historico_completo='', valor_absoluto=0.0, data_formatada='', mes_ano='', dia_semana='', tags=[], confianca_categorizacao=0.0, fonte='pdf', data_processamento='2025-12-13T23:30:32.192703', valido=False, erros_validacao=['Data/hora inválida', 'Valor da transação não pode ser zero'])",
+    "TransacaoNormalizada(id='PAGSEGURO_8e3143d9868c', data='', descricao='', valor=0.0, tipo='ENTRADA', categoria='sem_categoria', subcategoria='', banco='pagseguro', conta='', agencia='', documento='', lote='', historico_completo='', valor_absoluto=0.0, data_formatada='', mes_ano='', dia_semana='', tags=[], confianca_categorizacao=0.0, fonte='pdf', data_processamento='2025-12-13T23:30:32.192703', valido=False, erros_validacao=['Data/hora inválida', 'Valor da transação não pode ser zero'])",
+    "TransacaoNormalizada(id='PAGSEGURO_8e3143d9868c', data='', descricao='', valor=0.0, tipo='ENTRADA', categoria='sem_categoria', subcategoria='', banco='pagseguro', conta='', agencia='', documento='', lote='', historico_completo='', valor_absoluto=0.0, data_formatada='', mes_ano='', dia_semana='', tags=[], confianca_categorizacao=0.0, fonte='pdf', data_processamento='2025-12-13T23:30:32.192703', valido=False, erros_validacao=['Data/hora inválida', 'Valor da transação não pode ser zero'])",
+    "TransacaoNormalizada(id='PAGSEGURO_8e3143d9868c', data='', descricao='', valor=0.0, tipo='ENTRADA', categoria='sem_categoria', subcategoria='', banco='pagseguro', conta='', agencia='', documento='', lote='', historico_completo='', valor_absoluto=0.0, data_formatada='', mes_ano='', dia_semana='', tags=[], confianca_categorizacao=0.0, fonte='pdf', data_processamento='2025-12-13T23:30:32.192703', valido=False, erros_validacao=['Data/hora inválida', 'Valor da transação não pode ser zero'])"
+  ],
+  "estatisticas": {
+    "total_transacoes": 4,
+    "total_entradas": 4,
+    "total_saidas": 0,
+    "valor_total_entradas": 0.0,
+    "valor_total_saidas": 0.0,
+    "saldo_calculado": 0.0,
+    "categorias": {
+      "sem_categoria": 4
+    },
+    "subcategorias": {},
+    "dias_com_movimento": 1,
+    "transacoes_por_dia": {
+      "": 4
+    },
+    "transacoes_validas": 0,
+    "transacoes_invalidas": 4,
+    "contrapartes_identificadas": 0
+  },
+  "validacao": {
+    "valido": true,
+    "erros": [],
+    "avisos": [
+      "Diferença de saldo: R$ 1800.00",
+      "Alta porcentagem de transações sem categoria: 4/4",
+      "Transações com erros de validação: 4",
+      "Baixa identificação de contrapartes: 0/4"
+    ],
+    "estatisticas": {}
+  },
+  "preview_categorias": {
+    "totais": {
+      "entradas": 0.0,
+      "saidas": 0.0,
+      "saldo": 0.0
+    },
+    "receitas": {},
+    "despesas": {},
+    "sem_categoria": [
+      "TransacaoNormalizada(id='PAGSEGURO_8e3143d9868c', data='', descricao='', valor=0.0, tipo='ENTRADA', categoria='sem_categoria', subcategoria='', banco='pagseguro', conta='', agencia='', documento='', lote='', historico_completo='', valor_absoluto=0.0, data_formatada='', mes_ano='', dia_semana='', tags=[], confianca_categorizacao=0.0, fonte='pdf', data_processamento='2025-12-13T23:30:32.192703', valido=False, erros_validacao=['Data/hora inválida', 'Valor da transação não pode ser zero'])",
+      "TransacaoNormalizada(id='PAGSEGURO_8e3143d9868c', data='', descricao='', valor=0.0, tipo='ENTRADA', categoria='sem_categoria', subcategoria='', banco='pagseguro', conta='', agencia='', documento='', lote='', historico_completo='', valor_absoluto=0.0, data_formatada='', mes_ano='', dia_semana='', tags=[], confianca_categorizacao=0.0, fonte='pdf', data_processamento='2025-12-13T23:30:32.192703', valido=False, erros_validacao=['Data/hora inválida', 'Valor da transação não pode ser zero'])",
+      "TransacaoNormalizada(id='PAGSEGURO_8e3143d9868c', data='', descricao='', valor=0.0, tipo='ENTRADA', categoria='sem_categoria', subcategoria='', banco='pagseguro', conta='', agencia='', documento='', lote='', historico_completo='', valor_absoluto=0.0, data_formatada='', mes_ano='', dia_semana='', tags=[], confianca_categorizacao=0.0, fonte='pdf', data_processamento='2025-12-13T23:30:32.192703', valido=False, erros_validacao=['Data/hora inválida', 'Valor da transação não pode ser zero'])",
+      "TransacaoNormalizada(id='PAGSEGURO_8e3143d9868c', data='', descricao='', valor=0.0, tipo='ENTRADA', categoria='sem_categoria', subcategoria='', banco='pagseguro', conta='', agencia='', documento='', lote='', historico_completo='', valor_absoluto=0.0, data_formatada='', mes_ano='', dia_semana='', tags=[], confianca_categorizacao=0.0, fonte='pdf', data_processamento='2025-12-13T23:30:32.192703', valido=False, erros_validacao=['Data/hora inválida', 'Valor da transação não pode ser zero'])"
+    ]
+  },
+  "transacoes_finais": [
+    {
+      "ID_Transacao_Unico": "PAGSEGURO_8e3143d9868c",
+      "Conta_ID": "0001-123456-7",
+      "Data_Hora_Transacao": "",
+      "Valor_Numerico": 0.0,
+      "Tipo_Movimento": "CREDITO",
+      "Descricao_Normalizada": "",
+      "ID_Contraparte": "",
+      "Agencia_Banco_Origem": "pagseguro_0001",
+      "Origem_Dado": "PDF",
+      "Categoria_Sugerida": "sem_categoria",
+      "Subcategoria_Sugerida": "",
+      "Confianca_Categorizacao": 0.0,
+      "Nome_Contraparte": "",
+      "Saldo_Apos_Transacao": 0.0,
+      "Tags_Identificadas": [],
+      "Validado": false,
+      "Data_Processamento": "2025-12-13T23:30:32.192703"
+    },
+    {
+      "ID_Transacao_Unico": "PAGSEGURO_8e3143d9868c",
+      "Conta_ID": "0001-123456-7",
+      "Data_Hora_Transacao": "",
+      "Valor_Numerico": 0.0,
+      "Tipo_Movimento": "CREDITO",
+      "Descricao_Normalizada": "",
+      "ID_Contraparte": "",
+      "Agencia_Banco_Origem": "pagseguro_0001",
+      "Origem_Dado": "PDF",
+      "Categoria_Sugerida": "sem_categoria",
+      "Subcategoria_Sugerida": "",
+      "Confianca_Categorizacao": 0.0,
+      "Nome_Contraparte": "",
+      "Saldo_Apos_Transacao": 0.0,
+      "Tags_Identificadas": [],
+      "Validado": false,
+      "Data_Processamento": "2025-12-13T23:30:32.192703"
+    },
+    {
+      "ID_Transacao_Unico": "PAGSEGURO_8e3143d9868c",
+      "Conta_ID": "0001-123456-7",
+      "Data_Hora_Transacao": "",
+      "Valor_Numerico": 0.0,
+      "Tipo_Movimento": "CREDITO",
+      "Descricao_Normalizada": "",
+      "ID_Contraparte": "",
+      "Agencia_Banco_Origem": "pagseguro_0001",
+      "Origem_Dado": "PDF",
+      "Categoria_Sugerida": "sem_categoria",
+      "Subcategoria_Sugerida": "",
+      "Confianca_Categorizacao": 0.0,
+      "Nome_Contraparte": "",
+      "Saldo_Apos_Transacao": 0.0,
+      "Tags_Identificadas": [],
+      "Validado": false,
+      "Data_Processamento": "2025-12-13T23:30:32.192703"
+    },
+    {
+      "ID_Transacao_Unico": "PAGSEGURO_8e3143d9868c",
+      "Conta_ID": "0001-123456-7",
+      "Data_Hora_Transacao": "",
+      "Valor_Numerico": 0.0,
+      "Tipo_Movimento": "CREDITO",
+      "Descricao_Normalizada": "",
+      "ID_Contraparte": "",
+      "Agencia_Banco_Origem": "pagseguro_0001",
+      "Origem_Dado": "PDF",
+      "Categoria_Sugerida": "sem_categoria",
+      "Subcategoria_Sugerida": "",
+      "Confianca_Categorizacao": 0.0,
+      "Nome_Contraparte": "",
+      "Saldo_Apos_Transacao": 0.0,
+      "Tags_Identificadas": [],
+      "Validado": false,
+      "Data_Processamento": "2025-12-13T23:30:32.192703"
+    }
+  ]
+}

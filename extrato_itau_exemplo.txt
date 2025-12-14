@@ -1,0 +1,23 @@
+ITAÚ UNIBANCO S.A.
+EXTRATO DE CONTA CORRENTE
+
+Agência: 1234-5
+Conta: 12345-6
+
+Período: 01/12/2024 a 31/12/2024
+
+Saldo Anterior: R$ 2.500,00
+
+DATA        DESCRIÇÃO                           VALOR           SALDO
+01/12/2024  SALDO ANTERIOR                      2.500,00        2.500,00
+05/12/2024  SUPERMERCADO EXTRA                  156,78-         2.343,22
+07/12/2024  POSTO SHELL                         200,00-         2.143,22
+10/12/2024  SALÁRIO EMPRESA XYZ               5.000,00         7.143,22
+12/12/2024  UBER                               45,60-          7.097,62
+15/12/2024  NETFLIX                            39,90-          7.057,72
+18/12/2024  FARMÁCIA DROGASIL                  89,45-          6.968,27
+20/12/2024  DEPÓSITO                           300,00           7.268,27
+25/12/2024  AMAZON PRIME                       14,90-          7.253,37
+28/12/2024  RESTAURANTE                        67,80-          7.185,57
+
+Saldo Atual: R$ 7.185,57

@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Upload de Extrato - Assistente Pessoal{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">
+                    <i class="fas fa-upload me-2"></i>Processar Novo Extrato
+                </h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data" class="dropzone" id="uploadForm">
+                    <div class="mb-4 text-center">
+                        <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
+                        <h5>Arraste e solte seu arquivo aqui</h5>
+                        <p class="text-muted">Ou clique para selecionar</p>
+                        <input type="file" name="extrato" id="fileInput" accept=".pdf,.txt" class="d-none">
+                        <button type="button" class="btn btn-outline-primary" onclick="document.getElementById('fileInput').click()">
+                            <i class="fas fa-folder-open me-2"></i>Selecionar Arquivo
+                        </button>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="banco" class="form-label">Banco</label>
+                        <select class="form-select" id="banco" name="banco" required>
+                            <option value="">Selecione o banco</option>
+                            <option value="ITAU">Itaú</option>
+                            <option value="BRADESCO">Bradesco</option>
+                            <option value="SANTANDER">Santander</option>
+                            <option value="CAIXA">Caixa Econômica</option>
+                            <option value="BB">Banco do Brasil</option>
+                            <option value="NUBANK">Nubank</option>
+                            <option value="INTER">Banco Inter</option>
+                            <option value="C6">C6 Bank</option>
+                            <option value="NEXT">Next</option>
+                            <option value="ORIGINAL">Banco Original</option>
+                            <option value="PAN">Banco Pan</option>
+                            <option value="BMG">Banco BMG</option>
+                            <option value="DIGIO">Digio</option>
+                            <option value="PAGBANK">PagBank</option>
+                            <option value="MERCADOPAGO">Mercado Pago</option>
+                            <option value="OUTROS">Outros</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="senhaCheck" name="tem_senha">
+                            <label class="form-check-label" for="senhaCheck">
+                                O PDF está protegido por senha
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="senhaField" style="display: none;">
+                        <label for="senha" class="form-label">Senha do PDF</label>
+                        <input type="password" class="form-control" id="senha" name="senha">
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg" id="submitBtn" disabled>
+                            <i class="fas fa-cog fa-spin me-2" id="loadingIcon" style="display: none;"></i>
+                            <span id="submitText">Processar Extrato</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Resultado do processamento -->
+        <div class="card mt-4" id="resultadoCard" style="display: none;">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-check-circle text-success me-2"></i>Resultado do Processamento
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="resultadoContent"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('senhaCheck').addEventListener('change', function() {
+    const senhaField = document.getElementById('senhaField');
+    senhaField.style.display = this.checked ? 'block' : 'none';
+});
+
+document.getElementById('fileInput').addEventListener('change', function() {
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = !this.files.length;
+});
+
+document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const submitBtn = document.getElementById('submitBtn');
+    const submitText = document.getElementById('submitText');
+    const loadingIcon = document.getElementById('loadingIcon');
+    const resultadoCard = document.getElementById('resultadoCard');
+    const resultadoContent = document.getElementById('resultadoContent');
+
+    // Mostra loading
+    submitBtn.disabled = true;
+    submitText.textContent = 'Processando...';
+    loadingIcon.style.display = 'inline-block';
+
+    try {
+        const formData = new FormData(this);
+
+        const response = await fetch('/upload-extrato', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        // Mostra resultado
+        resultadoCard.style.display = 'block';
+        if (result.success) {
+            resultadoContent.innerHTML = `
+                <div class="alert alert-success">
+                    <h6>✅ Extrato processado com sucesso!</h6>
+                    <pre class="mb-0">${result.response}</pre>
+                </div>
+            `;
+        } else {
+            resultadoContent.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6>❌ Erro no processamento</h6>
+                    <p class="mb-0">${result.response}</p>
+                </div>
+            `;
+        }
+
+    } catch (error) {
+        resultadoContent.innerHTML = `
+            <div class="alert alert-danger">
+                <h6>❌ Erro de conexão</h6>
+                <p class="mb-0">${error.message}</p>
+            </div>
+        `;
+        resultadoCard.style.display = 'block';
+    }
+
+    // Restaura botão
+    submitBtn.disabled = false;
+    submitText.textContent = 'Processar Extrato';
+    loadingIcon.style.display = 'none';
+});
+</script>
+{% endblock %}

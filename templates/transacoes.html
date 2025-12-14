@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Transações - Assistente Pessoal{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="mb-0">
+                    <i class="fas fa-list me-2"></i>Transações
+                </h1>
+                <p class="text-muted mb-0">Visualize e gerencie todas as suas transações bancárias</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="/revisao-categorias" class="btn btn-info">
+                    <i class="fas fa-edit me-2"></i>Revisar Categorias
+                </a>
+                <a href="/upload-extrato" class="btn btn-primary">
+                    <i class="fas fa-upload me-2"></i>Upload Extrato
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Filtros</h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-2">
+                <label for="banco" class="form-label">Banco</label>
+                <select class="form-select" id="banco" name="banco">
+                    <option value="">Todos</option>
+                    {% for banco_opcao in bancos %}
+                    <option value="{{ banco_opcao }}" {% if filtros.banco == banco_opcao %}selected{% endif %}>
+                        {{ banco_opcao }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="tipo" class="form-label">Tipo</label>
+                <select class="form-select" id="tipo" name="tipo">
+                    <option value="">Todos</option>
+                    {% for tipo_opcao in tipos %}
+                    <option value="{{ tipo_opcao }}" {% if filtros.tipo == tipo_opcao %}selected{% endif %}>
+                        {{ tipo_opcao|title }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="categoria" class="form-label">Categoria</label>
+                <select class="form-select" id="categoria" name="categoria">
+                    <option value="">Todas</option>
+                    {% for cat in categorias %}
+                    <option value="{{ cat }}" {% if filtros.categoria == cat %}selected{% endif %}>
+                        {{ cat|title }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="data_inicio" class="form-label">Data Início</label>
+                <input type="date" class="form-control" id="data_inicio" name="data_inicio"
+                       value="{{ filtros.data_inicio }}">
+            </div>
+            <div class="col-md-2">
+                <label for="data_fim" class="form-label">Data Fim</label>
+                <input type="date" class="form-control" id="data_fim" name="data_fim"
+                       value="{{ filtros.data_fim }}">
+            </div>
+            <div class="col-md-2">
+                <label for="busca" class="form-label">Buscar</label>
+                <input type="text" class="form-control" id="busca" name="busca"
+                       placeholder="Descrição..." value="{{ filtros.busca }}">
+            </div>
+            <div class="col-md-2">
+                <label for="per_page" class="form-label">Por Página</label>
+                <select class="form-select" id="per_page" name="per_page">
+                    <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <div class="btn-group" role="group">
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="fas fa-filter me-1"></i>Filtrar
+                    </button>
+                    <a href="/transacoes" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i>Limpar
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Estatísticas -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <i class="fas fa-list fa-2x text-primary mb-2"></i>
+                <h5 class="card-title">{{ total_transacoes }}</h5>
+                <p class="card-text text-muted">Total de Transações</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <i class="fas fa-arrow-up fa-2x text-success mb-2"></i>
+                <h5 class="card-title">R$ {{ "%.2f"|format(total_entradas) }}</h5>
+                <p class="card-text text-muted">Total Entradas</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-danger">
+            <div class="card-body text-center">
+                <i class="fas fa-arrow-down fa-2x text-danger mb-2"></i>
+                <h5 class="card-title">R$ {{ "%.2f"|format(total_saidas) }}</h5>
+                <p class="card-text text-muted">Total Saídas</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <i class="fas fa-file fa-2x text-info mb-2"></i>
+                <h5 class="card-title">{{ page }} / {{ total_pages }}</h5>
+                <p class="card-text text-muted">Página Atual</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabela de Transações -->
+<div class="card">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">
+            <i class="fas fa-table me-2"></i>Transações
+            <span class="badge bg-secondary ms-2">{{ total_transacoes }} transações</span>
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th width="60">#</th>
+                        <th width="100">Data</th>
+                        <th width="120">Tipo</th>
+                        <th>Descrição</th>
+                        <th width="120" class="text-end">Valor</th>
+                        <th width="150">Categoria</th>
+                        <th width="100">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for transacao in transacoes %}
+                    <tr>
+                        <td class="fw-bold">{{ ((page - 1) * per_page) + loop.index }}</td>
+                        <td>{{ transacao.data }}</td>
+                        <td>
+                            {% if transacao.tipo == 'entrada' %}
+                                <span class="badge bg-success">💚 Entrada</span>
+                            {% else %}
+                                <span class="badge bg-danger">❤️ Saída</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="fw-bold">{{ transacao.descricao[:60] }}</div>
+                            {% if transacao.descricao|length > 60 %}
+                            <small class="text-muted">{{ transacao.descricao[60:] }}</small>
+                            {% endif %}
+                        </td>
+                        <td class="text-end fw-bold">
+                            R$ {{ "%.2f"|format(transacao.valor) }}
+                        </td>
+                        <td>
+                            {% if transacao.categoria %}
+                                <span class="badge bg-secondary">{{ transacao.categoria|title }}</span>
+                            {% else %}
+                                <span class="badge bg-warning">Sem Categoria</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-info" title="Ver Detalhes">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Paginação -->
+{% if total_pages > 1 %}
+<div class="row mt-4">
+    <div class="col-12">
+        <nav aria-label="Paginação">
+            <ul class="pagination justify-content-center">
+                {% if page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('listar_transacoes', page=page-1, per_page=per_page, banco=filtros.banco, tipo=filtros.tipo, categoria=filtros.categoria, data_inicio=filtros.data_inicio, data_fim=filtros.data_fim, busca=filtros.busca) }}">
+                        <i class="fas fa-chevron-left"></i> Anterior
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1">
+                        <i class="fas fa-chevron-left"></i> Anterior
+                    </a>
+                </li>
+                {% endif %}
+
+                {% set start_page = page - 2 %}
+                {% if start_page < 1 %}
+                    {% set start_page = 1 %}
+                {% endif %}
+                {% set end_page = page + 2 %}
+                {% if end_page > total_pages %}
+                    {% set end_page = total_pages %}
+                {% endif %}
+
+                {% for page_num in range(start_page, end_page + 1) %}
+                <li class="page-item {% if page_num == page %}active{% endif %}">
+                    <a class="page-link" href="{{ url_for('listar_transacoes', page=page_num, per_page=per_page, banco=filtros.banco, tipo=filtros.tipo, categoria=filtros.categoria, data_inicio=filtros.data_inicio, data_fim=filtros.data_fim, busca=filtros.busca) }}">
+                        {{ page_num }}
+                    </a>
+                </li>
+                {% endfor %}
+
+                {% if page < total_pages %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('listar_transacoes', page=page+1, per_page=per_page, banco=filtros.banco, tipo=filtros.tipo, categoria=filtros.categoria, data_inicio=filtros.data_inicio, data_fim=filtros.data_fim, busca=filtros.busca) }}">
+                        Próximo <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <a class="page-link" href="#" tabindex="-1">
+                        Próximo <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

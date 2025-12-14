@@ -1,0 +1,39 @@
+{
+  "banco": "PAGSEGURO",
+  "agencia": "0001",
+  "conta": "123456-7",
+  "titular": "João Silva",
+  "periodo": "01/11/2025 - 30/11/2025",
+  "saldo_anterior": 2500.0,
+  "saldo_atual": 1800.0,
+  "transacoes": [
+    {
+      "data": "05/11/2025",
+      "descricao": "RECEBIMENTO PIX DE MARIA SANTOS",
+      "valor": 500.0,
+      "tipo": "credito",
+      "categoria_sugerida": "transferencias"
+    },
+    {
+      "data": "10/11/2025",
+      "descricao": "PAGAMENTO PAGBANK MERCADO XYZ",
+      "valor": -200.0,
+      "tipo": "debito",
+      "categoria_sugerida": "compras"
+    },
+    {
+      "data": "15/11/2025",
+      "descricao": "RECEBIMENTO VENDA PRODUTO ABC",
+      "valor": 150.0,
+      "tipo": "credito",
+      "categoria_sugerida": "vendas"
+    },
+    {
+      "data": "20/11/2025",
+      "descricao": "PAGAMENTO TAXA SERVICO",
+      "valor": -50.0,
+      "tipo": "debito",
+      "categoria_sugerida": "taxas"
+    }
+  ]
+}
