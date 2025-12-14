@@ -1,0 +1,533 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                ║
+║                   🚀 ROADMAP - VERSÃO 2.0 - ASSISTENTE PESSOAL                 ║
+║                                                                                ║
+║                            Ideias para Expansão Futura                          ║
+║                                                                                ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+
+═══════════════════════════════════════════════════════════════════════════════════
+📅 DATA: 8 de Dezembro de 2025
+📝 STATUS: Planejamento para Versão 2.0
+═══════════════════════════════════════════════════════════════════════════════════
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 🔐 1. SISTEMA DE AUTENTICAÇÃO AVANÇADO                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  1.1 - LOGINS ALTERNATIVOS
+  ─────────────────────────
+  
+    Problema Atual:
+      • Apenas Google OAuth
+      • Depende de autenticação do Google
+      • Limitado a funcionalidade do Google
+  
+    Solução v2.0:
+      ✓ Implementar múltiplas opções de login:
+        - Microsoft (Outlook Calendar, Office 365)
+        - Apple (iCloud Calendar)
+        - Calendário local (sem nuvem)
+        - GitHub OAuth (alternativa)
+        - Telegram OAuth (para bots)
+        - WhatsApp OAuth (se disponível)
+  
+    Benefícios:
+      ✓ Flexibilidade do usuário
+      ✓ Redundância (não depender de um único provider)
+      ✓ Suporte a mais calendários
+      ✓ Melhor compatibilidade
+
+
+  1.2 - CACHE DE SESSÃO (NÃO PEDIR LOGIN NOVAMENTE)
+  ─────────────────────────────────────────────────
+  
+    Problema Atual:
+      • Cada mensagem requer verificação de autenticação
+      • Processamento lento
+      • Google pode bloquear por muitas requisições
+  
+    Solução v2.0:
+      ✓ Sistema de cache com token refresh:
+        
+        data/
+        ├── cache/
+        │   ├── user_tokens.json         # Tokens em cache
+        │   ├── session_expiry.json      # Expiração de sessões
+        │   └── device_fingerprint.json  # Identificação de dispositivo
+        
+      ✓ Validação de dispositivo:
+        - Salvar fingerprint do dispositivo
+        - Se mesmo dispositivo: usar cache
+        - Se novo dispositivo: solicitar confirmação
+        - Evitar login simultâneo em múltiplos dispositivos
+  
+    Implementação:
+      ✓ Token armazenado em cache (seguro)
+      ✓ TTL (Time To Live) - expiração em X dias
+      ✓ Refresh automático 24h antes de expirar
+      ✓ Logout manual quando troca de dispositivo
+  
+    Código de Exemplo:
+      ```python
+      class CacheSessionManager:
+          def salvar_sessao(user_id, token, device_id):
+              # Salvar com fingerprint do dispositivo
+              sessao = {
+                  'token': token,
+                  'device_id': device_id,
+                  'criado_em': datetime.now(),
+                  'expira_em': datetime.now() + timedelta(days=7),
+                  'ip_address': user_ip,
+                  'user_agent': browser_info
+              }
+              salvar_em_cache(sessao)
+          
+          def validar_sessao(user_id, device_id):
+              sessao = carregar_cache(user_id)
+              if sessao['device_id'] == device_id and not expirou:
+                  return True  # Usar token em cache
+              return False  # Solicitar novo login
+      ```
+
+
+  1.3 - LOGOUT EM GRUPOS (PRIVACIDADE)
+  ────────────────────────────────────
+  
+    Problema:
+      • Usuário 1 faz login no grupo
+      • Todos veem o login de Usuário 1
+      • Dados compartilhados inadvertidamente
+  
+    Solução v2.0:
+      ✓ Sistema de "Modo Grupo" isolado:
+        
+        - Login individual (não compartilha credenciais)
+        - Cada usuário tem sessão separada
+        - Calendários particulares não visíveis
+        - Apenas agenda compartilhada visível
+        - Comando: /logout_grupo (sair sem deslogar de outros)
+      
+      ✓ Isolamento de dados em grupos:
+        ```
+        data/
+        ├── usuarios/
+        │   ├── user1/
+        │   │   ├── calendario_pessoal.json    # Privado
+        │   │   ├── lembretes_pessoal.json      # Privado
+        │   │   └── tokens/                     # Isolado
+        │   └── user2/
+        │       └── [mesma estrutura]
+        ├── grupos/
+        │   └── grupo_123/
+        │       ├── calendario_compartilhado.json
+        │       ├── membros.json
+        │       └── permissoes.json
+        ```
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 📅 2. INTEGRAÇÃO COM MÚLTIPLAS AGENDAS                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  2.1 - AGENDAS SUPORTADAS
+  ──────────────────────
+  
+    ✓ Google Calendar          (já implementado)
+    ✓ Microsoft Outlook        (novo)
+    ✓ Apple iCloud Calendar    (novo)
+    ✓ Calendário Local         (novo)
+    ✓ Nextcloud Calendar       (novo - para empresas)
+    ✓ CalDAV (protocolo aberto)
+    ✓ ICS (importar/exportar)
+  
+  
+  2.2 - SINCRONIZAÇÃO MULTI-PLATAFORMA
+  ─────────────────────────────────────
+  
+    Implementar:
+      ```python
+      class SincronizadorAgendas:
+          def sincronizar_todas(user_id):
+              # Buscar de todas as agendas
+              eventos_google = get_google_calendar(user_id)
+              eventos_outlook = get_outlook_calendar(user_id)
+              eventos_apple = get_apple_calendar(user_id)
+              eventos_local = get_local_calendar(user_id)
+              
+              # Mesclar e remover duplicatas
+              todos_eventos = mesclar_deduplica(
+                  eventos_google,
+                  eventos_outlook,
+                  eventos_apple,
+                  eventos_local
+              )
+              
+              return todos_eventos
+          
+          def criar_em_multiplas_agendas(evento, agendas=['google', 'outlook']):
+              # Criar simultaneamente em múltiplas agendas
+              for agenda in agendas:
+                  criar_evento(evento, agenda)
+      ```
+
+
+  2.3 - ESCOLHER QUAL AGENDA USAR
+  ────────────────────────────────
+  
+    Comando:
+      /agenda_principal microsoft
+      /agenda_principal google
+      /agenda_adicional outlook
+      /agenda_adicional apple
+      
+    Resultado:
+      • Sincronizar de todas
+      • Criar sempre na principal
+      • Sincronizar com adicionais
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 👥 3. FUNCIONALIDADES DE GRUPO                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  3.1 - AGENDA COMPARTILHADA
+  ────────────────────────
+  
+    Novos Comandos:
+      /criar_grupo "Projeto XYZ"
+      /adicionar_membro @usuario1 @usuario2
+      /remover_membro @usuario3
+      /grupo_agendar "Reunião" "25/12/2025" "14:00"
+      /grupo_ver_agenda
+      /grupo_permissoes
+  
+  
+  3.2 - PERMISSÕES EM GRUPO
+  ─────────────────────────
+  
+    Tipos:
+      • ADMIN     - Criar, editar, deletar, gerenciar membros
+      • EDITOR    - Criar, editar, deletar (apenas seus)
+      • VISUALIZADOR - Apenas visualizar
+      • CONVIDADO - Visualizar + comentar
+  
+    Implementar:
+      ```python
+      class PermissaoGrupo:
+          ROLES = {
+              'admin': ['criar', 'editar', 'deletar', 'gerenciar_membros'],
+              'editor': ['criar', 'editar', 'deletar'],
+              'viewer': ['visualizar'],
+              'guest': ['visualizar', 'comentar']
+          }
+          
+          def verificar_permissao(user_id, grupo_id, acao):
+              role = get_role_usuario(user_id, grupo_id)
+              return acao in self.ROLES[role]
+      ```
+
+
+  3.3 - NOTIFICAÇÕES DE GRUPO
+  ──────────────────────────
+  
+    • Novo evento criado no grupo
+    • Membro adicionado
+    • Alteração em evento compartilhado
+    • Comentário em evento
+    • Lembrete compartilhado
+  
+    
+  3.4 - COMENTÁRIOS EM EVENTOS
+  ───────────────────────────
+  
+    Comando:
+      /comentar evento_id "Confirmando presença"
+    
+    Resultado:
+      • Todos do grupo veem comentário
+      • Thread de discussão
+      • Notificações
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ✨ 4. OUTRAS FEATURES IMPORTANTES                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  4.1 - INTELIGÊNCIA ARTIFICIAL AVANÇADA
+  ──────────────────────────────────────
+  
+    ✓ Análise de sentimento de mensagens
+      - "Vou chegar atrasado" → Aviso automático
+      - "Tô muito ocupado" → Sugerir reagendar
+    
+    ✓ Sugestão automática de horários
+      - "Agendar reunião com João"
+      - Sistema sugere: "João está livre 25/12 às 14:00?"
+    
+    ✓ Detecção de conflitos
+      - Alertar se evento sobrepõe outro
+      - Sugerir horários alternativos
+    
+    ✓ Análise de padrões
+      - "Você agenda reuniões sempre 3ª e 5ª"
+      - "Seu tempo médio de reunião é 45min"
+
+
+  4.2 - INTEGRAÇÃO COM OUTROS SERVIÇOS
+  ────────────────────────────────────
+  
+    ✓ Zoom/Google Meet
+      - Gerar link automaticamente
+      - Adicionar na descrição do evento
+      - Enviar para participantes
+    
+    ✓ Slack/Discord
+      - Enviar lembretes para Slack
+      - Criar eventos a partir de Slack
+      - Bot integrado
+    
+    ✓ Email
+      - Enviar confirmação por email
+      - Receber convites por email
+      - Responder convites
+    
+    ✓ SMS
+      - Lembrete via SMS
+      - Confirmar presença por SMS
+    
+    ✓ WhatsApp
+      - Agendamentos via WhatsApp
+      - Lembretes via WhatsApp
+      - Confirmação de presença
+
+
+  4.3 - RELATÓRIOS E ESTATÍSTICAS
+  ───────────────────────────────
+  
+    Comandos:
+      /relatorio_mes          # Resumo do mês
+      /relatorio_produtividade # Tempo gasto em reuniões
+      /relatorio_ocupacao     # Gráfico de ocupação
+      /stats_eventos          # Total de eventos
+    
+    Gráficos:
+      • Heatmap de ocupação
+      • Gráfico de eventos por tipo
+      • Tempo total de reuniões
+      • Horário mais ocupado
+
+
+  4.4 - BACKUP E SINCRONIZAÇÃO
+  ────────────────────────────
+  
+    ✓ Backup automático
+      - Backup diário em nuvem
+      - Versionamento
+      - Restauração rápida
+    
+    ✓ Sincronização em tempo real
+      - Múltiplos dispositivos
+      - Sincronizar bidirecionalmente
+      - Resolver conflitos automaticamente
+
+
+  4.5 - NOTIFICAÇÕES AVANÇADAS
+  ────────────────────────────
+  
+    ✓ Lembrete em cascata
+      - 1 dia antes
+      - 1 hora antes
+      - 15 minutos antes
+    
+    ✓ Alertas inteligentes
+      - Trânsito: "Sair 30min antes por causa do trânsito"
+      - Clima: "Levar guarda-chuva, chuva prevista"
+      - Localização: Navegar para local
+    
+    ✓ Personalizáveis por tipo evento
+      - Reunião → Alerta 1h antes
+      - Médico → Alerta 24h antes
+      - Aniversário → Alerta 7 dias antes
+
+
+  4.6 - ANÁLISE DE DISPONIBILIDADE
+  ────────────────────────────────
+  
+    Comando:
+      /encontrar_horario "Reunião com @user1 @user2" "30min"
+    
+    Sistema retorna:
+      • Próximos 5 horários disponíveis para todos
+      • Sugere melhor horário (baseado em preferências)
+      • Propõe automaticamente
+
+
+  4.7 - INTEGRAÇÃO COM BANCO DE HORAS
+  ───────────────────────────────────
+  
+    • Rastrear horas de trabalho
+    • Lançar horas em sistema RH
+    • Calcular jornada diária
+    • Alertar se passou de 8h
+
+
+  4.8 - TEMAS E CUSTOMIZAÇÃO
+  ──────────────────────────
+  
+    Comandos:
+      /tema dark
+      /tema light
+      /idioma português
+      /idioma english
+      /timezone America/New_York
+    
+    Customizações:
+      • Cores personalizadas
+      • Emojis personalizados
+      • Formato de data/hora
+      • Dias de trabalho
+
+
+  4.9 - INTEGRAÇÃO COM TODO/TAREFAS
+  ────────────────────────────────
+  
+    • Converter tarefa em evento
+    • Estimativa de tempo em tarefa
+    • Bloquear tempo para tarefas
+    • Sincronizar com Todoist/Asana
+
+
+  4.10 - MODO FOCO/NÃO PERTURBE
+  ─────────────────────────────
+  
+    Comando:
+      /foco_ate "15:00"
+      /nao_perturbe "14:00" "15:00"
+    
+    Resultado:
+      • Não recebe notificações
+      • Marca como ocupado
+      • Respostas automáticas
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 🏗️ 5. ARQUITETURA PROPOSTA v2.0                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  Estrutura de Diretórios:
+  
+  ```
+  modules/
+  ├── autenticacao/
+  │   ├── google_auth.py         (existente)
+  │   ├── microsoft_auth.py       (novo)
+  │   ├── apple_auth.py          (novo)
+  │   ├── cache_manager.py       (novo)
+  │   └── device_fingerprint.py  (novo)
+  ├── agendas/
+  │   ├── agenda_google.py       (existente)
+  │   ├── agenda_microsoft.py    (novo)
+  │   ├── agenda_apple.py        (novo)
+  │   ├── agenda_caldav.py       (novo)
+  │   ├── sincronizador.py       (novo)
+  │   └── merged_calendar.py     (novo)
+  ├── grupos/
+  │   ├── grupo_manager.py       (novo)
+  │   ├── permissoes.py          (novo)
+  │   └── compartilhamento.py    (novo)
+  ├── notificacoes/
+  │   ├── email_notifier.py      (novo)
+  │   ├── sms_notifier.py        (novo)
+  │   ├── slack_notifier.py      (novo)
+  │   └── push_notifier.py       (novo)
+  ├── ia/
+  │   ├── analise_sentimento.py  (novo)
+  │   ├── sugestoes.py           (novo)
+  │   └── deteccao_conflitos.py  (novo)
+  └── relatorios/
+      ├── gerador_relatorios.py  (novo)
+      └── graficos.py            (novo)
+  ```
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 📊 6. PLANO DE IMPLEMENTAÇÃO                                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  FASE 1 (2-3 meses):
+    ✓ Cache de sessão
+    ✓ Logout em grupos
+    ✓ Login alternativo (Microsoft)
+  
+  FASE 2 (2-3 meses):
+    ✓ Integração multi-agendas
+    ✓ Funcionalidades de grupo básicas
+    ✓ Permissões
+  
+  FASE 3 (1-2 meses):
+    ✓ Notificações avançadas
+    ✓ IA com sugestões
+    ✓ Integração Zoom/Teams
+  
+  FASE 4 (1-2 meses):
+    ✓ Relatórios e estatísticas
+    ✓ Análise de disponibilidade
+    ✓ Integração SMS/Email
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 🎯 7. MÉTRICAS DE SUCESSO v2.0                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  Após implementar v2.0:
+  
+  ✓ Tempo de resposta < 1 segundo
+  ✓ Suporte a 1 milhão de usuários
+  ✓ 99.9% de uptime
+  ✓ Redução de 70% em logins repetidos
+  ✓ 5+ provedores de calendário
+  ✓ Suporte a 20+ idiomas
+  ✓ Integração com 10+ serviços externos
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 💡 8. IDEIAS ADICIONAIS PARA EXPLORAR                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  ✓ App mobile (iOS/Android)
+  ✓ Extensão para Chrome/Firefox
+  ✓ Bot para Discord
+  ✓ Bot para Telegram melhorado
+  ✓ Widget para Dashboard
+  ✓ API pública
+  ✓ Monetização (planos premium)
+  ✓ Machine Learning para otimizar calendário
+  ✓ AR para visualizar calendário
+  ✓ Integração com IoT (abrir portas, ligar TV)
+
+
+═════════════════════════════════════════════════════════════════════════════════
+✅ PRÓXIMOS PASSOS
+═════════════════════════════════════════════════════════════════════════════════
+
+1. Priorizar features da v2.0
+2. Criar tickets no GitHub
+3. Designar desenvolvedores
+4. Começar com FASE 1
+5. Roadmap público para comunidade
+
+
+═════════════════════════════════════════════════════════════════════════════════
+📞 CONTATO/FEEDBACK
+═════════════════════════════════════════════════════════════════════════════════
+
+Para sugestões ou feedback:
+  • GitHub Issues
+  • Email: [email]
+  • Slack: [channel]
+
+
+═════════════════════════════════════════════════════════════════════════════════
