@@ -49,6 +49,25 @@ data/*.json
 
 # Logs
 *.log
+
+# External Libraries (should be installed via pip)
+PyMuPDF/
+camelot/
+ofxparse/
+tabula-py/
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 logs/
 
 # Temp files
