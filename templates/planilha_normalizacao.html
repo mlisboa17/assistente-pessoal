@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planilha de Normalização - Assistente Pessoal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+    <style>
+        .planilha-container {
+            max-width: 100%;
+            overflow-x: auto;
+        }
+        .planilha-table {
+            min-width: 1200px;
+            font-size: 0.875rem;
+        }
+        .planilha-table th {
+            background-color: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .planilha-table td {
+            vertical-align: middle;
+        }
+        .checkbox-cell {
+            text-align: center;
+            width: 50px;
+        }
+        .categoria-cell {
+            min-width: 150px;
+        }
+        .valor-cell {
+            text-align: right;
+            font-weight: bold;
+        }
+        .valor-credito {
+            color: #28a745;
+        }
+        .valor-debito {
+            color: #dc3545;
+        }
+        .batch-actions {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .filter-section {
+            background-color: #e9ecef;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            margin-bottom: 1rem;
+        }
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .select-all-container {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .categoria-select {
+            min-width: 140px;
+        }
+        .banco-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h1 class="h3 mb-0"><i class="fas fa-table me-2"></i>Planilha de Normalização</h1>
+                        <p class="text-muted mb-0">Segunda normalização com operações em lote</p>
+                    </div>
+                    <div>
+                        <a href="{{ url_for('revisao_categorias') }}" class="btn btn-outline-primary me-2">
+                            <i class="fas fa-arrow-left me-1"></i>Voltar à Revisão
+                        </a>
+                        <button type="button" class="btn btn-success" onclick="salvarAlteracoes()">
+                            <i class="fas fa-save me-1"></i>Salvar Alterações
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estatísticas -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-list-ul fa-2x me-3"></i>
+                        <div>
+                            <h4 class="mb-0" id="total-transacoes">{{ transacoes|length }}</h4>
+                            <small>Total de Transações</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-check-circle fa-2x me-3"></i>
+                        <div>
+                            <h4 class="mb-0" id="transacoes-categorizadas">{{ transacoes|selectattr('is_categorizado')|list|length }}</h4>
+                            <small>Categorizadas</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-clock fa-2x me-3"></i>
+                        <div>
+                            <h4 class="mb-0" id="transacoes-pendentes">{{ transacoes|rejectattr('is_categorizado')|list|length }}</h4>
+                            <small>Pendentes</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-dollar-sign fa-2x me-3"></i>
+                        <div>
+                            <h4 class="mb-0" id="valor-total">R$ {{ "%.2f"|format(transacoes|sum(attribute='valor')) }}</h4>
+                            <small>Valor Total</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="filter-section">
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label for="data_inicio" class="form-label">Data Início</label>
+                    <input type="date" class="form-control" id="data_inicio" name="data_inicio" value="{{ data_inicio }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="data_fim" class="form-label">Data Fim</label>
+                    <input type="date" class="form-control" id="data_fim" name="data_fim" value="{{ data_fim }}">
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-filter me-1"></i>Filtrar
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Ações em Lote -->
+        <div class="batch-actions">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <div class="select-all-container">
+                        <input type="checkbox" class="form-check-input" id="select-all">
+                        <label class="form-check-label fw-bold" for="select-all">
+                            Selecionar Todas
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-6 text-end">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="adicionarCategoria()">
+                            <i class="fas fa-plus me-1"></i>Adicionar Categoria
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="aplicarCategoriaLote()">
+                            <i class="fas fa-tag me-1"></i>Aplicar Categoria
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="excluirSelecionadas()">
+                            <i class="fas fa-trash me-1"></i>Excluir Selecionadas
+                        </button>
+                        <button type="button" class="btn btn-outline-info btn-sm" onclick="exportarSelecionadas()">
+                            <i class="fas fa-download me-1"></i>Exportar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Planilha -->
+        <div class="planilha-container">
+            <table class="table table-striped table-hover planilha-table">
+                <thead>
+                    <tr>
+                        <th class="checkbox-cell">
+                            <input type="checkbox" class="form-check-input" id="select-all-header">
+                        </th>
+                        <th>Data</th>
+                        <th>Descrição</th>
+                        <th>Valor</th>
+                        <th class="checkbox-cell">Crédito</th>
+                        <th class="checkbox-cell">Débito</th>
+                        <th class="checkbox-cell">Categorizado</th>
+                        <th class="checkbox-cell">Pendente</th>
+                        <th class="categoria-cell">Categoria</th>
+                        <th>Banco</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for transacao in transacoes %}
+                    <tr data-id="{{ loop.index }}">
+                        <td class="checkbox-cell">
+                            <input type="checkbox" class="form-check-input row-checkbox" data-id="{{ loop.index }}">
+                        </td>
+                        <td>{{ transacao.data }}</td>
+                        <td>{{ transacao.descricao }}</td>
+                        <td class="valor-cell {{ 'valor-credito' if transacao.is_credito else 'valor-debito' }}">
+                            {{ transacao.valor_formatado }}
+                        </td>
+                        <td class="checkbox-cell">
+                            <input type="checkbox" class="form-check-input" 
+                                   {{ 'checked' if transacao.is_credito else '' }} disabled>
+                        </td>
+                        <td class="checkbox-cell">
+                            <input type="checkbox" class="form-check-input" 
+                                   {{ 'checked' if transacao.is_debito else '' }} disabled>
+                        </td>
+                        <td class="checkbox-cell">
+                            <input type="checkbox" class="form-check-input" 
+                                   {{ 'checked' if transacao.is_categorizado else '' }} disabled>
+                        </td>
+                        <td class="checkbox-cell">
+                            <input type="checkbox" class="form-check-input" 
+                                   {{ 'checked' if transacao.is_pendente else '' }} disabled>
+                        </td>
+                        <td class="categoria-cell">
+                            <select class="form-select form-select-sm categoria-select" 
+                                    data-id="{{ loop.index }}"
+                                    onchange="atualizarCategoria(this)">
+                                <option value="">Selecionar...</option>
+                                {% for categoria in categorias_disponiveis %}
+                                <option value="{{ categoria }}" 
+                                        {{ 'selected' if transacao.categoria == categoria else '' }}>
+                                    {{ categoria|title }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            {% set banco = transacao.descricao.split(': ')[0] if ': ' in transacao.descricao else 'N/A' %}
+                            <span class="badge bg-secondary banco-badge">{{ banco }}</span>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-primary btn-sm" 
+                                        onclick="editarTransacao({{ loop.index }})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" 
+                                        onclick="excluirTransacao({{ loop.index }})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Modal para Aplicar Categoria em Lote -->
+        <div class="modal fade" id="categoriaLoteModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Aplicar Categoria em Lote</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Selecione a categoria para aplicar às transações selecionadas:</p>
+                        <select class="form-select" id="categoriaLoteSelect">
+                            <option value="">Selecionar categoria...</option>
+                            {% for categoria in categorias_disponiveis %}
+                            <option value="{{ categoria }}">{{ categoria|title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" onclick="confirmarAplicarCategoria()">Aplicar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal para Editar Transação -->
+        <div class="modal fade" id="editarTransacaoModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Editar Transação</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="editarTransacaoForm">
+                            <input type="hidden" id="editarTransacaoId">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="editarData" class="form-label">Data</label>
+                                    <input type="text" class="form-control" id="editarData" placeholder="DD/MM/YYYY">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="editarValor" class="form-label">Valor</label>
+                                    <input type="number" class="form-control" id="editarValor" step="0.01">
+                                </div>
+                                <div class="col-12">
+                                    <label for="editarDescricao" class="form-label">Descrição</label>
+                                    <textarea class="form-control" id="editarDescricao" rows="3"></textarea>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="editarCategoria" class="form-label">Categoria</label>
+                                    <select class="form-select" id="editarCategoria">
+                                        <option value="">Selecionar categoria...</option>
+                                        {% for categoria in categorias_disponiveis %}
+                                        <option value="{{ categoria }}">{{ categoria|title }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="editarTipo" class="form-label">Tipo</label>
+                                    <select class="form-select" id="editarTipo">
+                                        <option value="entrada">Entrada (Crédito)</option>
+                                        <option value="saida">Saída (Débito)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" onclick="salvarEdicaoTransacao()">Salvar Alterações</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal para Adicionar Categoria -->
+        <div class="modal fade" id="adicionarCategoriaModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Adicionar Nova Categoria</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="adicionarCategoriaForm">
+                            <div class="mb-3">
+                                <label for="novaCategoria" class="form-label">Nome da Categoria</label>
+                                <input type="text" class="form-control" id="novaCategoria" 
+                                       placeholder="Ex: viagem, reforma, doacao..." required>
+                                <div class="form-text">
+                                    Digite o nome da nova categoria em minúsculas, sem acentos.
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-success" onclick="salvarNovaCategoria()">Adicionar Categoria</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner-border text-light" role="status">
+            <span class="visually-hidden">Carregando...</span>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Dados das transações (para manipulação no frontend)
+        let transacoesOriginais = {{ transacoes|tojson }};
+        let transacoesModificadas = JSON.parse(JSON.stringify(transacoesOriginais));
+
+        // Funções de seleção
+        document.getElementById('select-all').addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.row-checkbox');
+            checkboxes.forEach(cb => cb.checked = this.checked);
+            atualizarEstatisticas();
+        });
+
+        document.getElementById('select-all-header').addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.row-checkbox');
+            checkboxes.forEach(cb => cb.checked = this.checked);
+            document.getElementById('select-all').checked = this.checked;
+            atualizarEstatisticas();
+        });
+
+        // Atualizar estatísticas baseado na seleção
+        function atualizarEstatisticas() {
+            const selecionadas = document.querySelectorAll('.row-checkbox:checked');
+            // Atualizar contadores se necessário
+        }
+
+        // Aplicar categoria em lote
+        function aplicarCategoriaLote() {
+            const selecionadas = document.querySelectorAll('.row-checkbox:checked');
+            if (selecionadas.length === 0) {
+                alert('Selecione pelo menos uma transação.');
+                return;
+            }
+            
+            const modal = new bootstrap.Modal(document.getElementById('categoriaLoteModal'));
+            modal.show();
+        }
+
+        function confirmarAplicarCategoria() {
+            const categoria = document.getElementById('categoriaLoteSelect').value;
+            if (!categoria) {
+                alert('Selecione uma categoria.');
+                return;
+            }
+
+            const selecionadas = document.querySelectorAll('.row-checkbox:checked');
+            selecionadas.forEach(cb => {
+                const id = parseInt(cb.dataset.id);
+                const select = document.querySelector(`.categoria-select[data-id="${id}"]`);
+                if (select) {
+                    select.value = categoria;
+                    // Atualizar dados
+                    transacoesModificadas[id - 1].categoria = categoria;
+                    transacoesModificadas[id - 1].is_categorizado = true;
+                    transacoesModificadas[id - 1].is_pendente = false;
+                }
+            });
+
+            // Fechar modal e atualizar estatísticas
+            bootstrap.Modal.getInstance(document.getElementById('categoriaLoteModal')).hide();
+            atualizarEstatisticasVisuais();
+            mostrarMensagemSucesso(`${selecionadas.length} transações categorizadas com sucesso!`);
+        }
+
+        // Atualizar categoria individual
+        function atualizarCategoria(select) {
+            const id = parseInt(select.dataset.id);
+            const categoria = select.value;
+            
+            transacoesModificadas[id - 1].categoria = categoria;
+            transacoesModificadas[id - 1].is_categorizado = categoria !== '';
+            transacoesModificadas[id - 1].is_pendente = categoria === '';
+            
+            atualizarEstatisticasVisuais();
+        }
+
+        // Atualizar estatísticas visuais
+        function atualizarEstatisticasVisuais() {
+            const categorizadas = transacoesModificadas.filter(t => t.is_categorizado).length;
+            const pendentes = transacoesModificadas.filter(t => t.is_pendente).length;
+            
+            document.getElementById('transacoes-categorizadas').textContent = categorizadas;
+            document.getElementById('transacoes-pendentes').textContent = pendentes;
+        }
+
+        // Excluir transação
+        function excluirTransacao(id) {
+            if (confirm('Tem certeza que deseja excluir esta transação?')) {
+                // Remover da tabela
+                const row = document.querySelector(`tr[data-id="${id}"]`);
+                if (row) {
+                    row.remove();
+                    // Remover dos dados
+                    transacoesModificadas.splice(id - 1, 1);
+                    atualizarEstatisticasVisuais();
+                }
+            }
+        }
+
+        // Excluir selecionadas
+        function excluirSelecionadas() {
+            const selecionadas = document.querySelectorAll('.row-checkbox:checked');
+            if (selecionadas.length === 0) {
+                alert('Selecione pelo menos uma transação.');
+                return;
+            }
+            
+            if (confirm(`Tem certeza que deseja excluir ${selecionadas.length} transações?`)) {
+                selecionadas.forEach(cb => {
+                    const row = cb.closest('tr');
+                    const id = parseInt(cb.dataset.id);
+                    row.remove();
+                    // Remover dos dados (ajustar índices)
+                    transacoesModificadas.splice(id - 1, 1);
+                });
+                atualizarEstatisticasVisuais();
+                mostrarMensagemSucesso(`${selecionadas.length} transações excluídas.`);
+            }
+        }
+
+        // Exportar selecionadas
+        function exportarSelecionadas() {
+            const selecionadas = document.querySelectorAll('.row-checkbox:checked');
+            if (selecionadas.length === 0) {
+                alert('Selecione pelo menos uma transação.');
+                return;
+            }
+            
+            const dadosExportar = [];
+            selecionadas.forEach(cb => {
+                const id = parseInt(cb.dataset.id);
+                dadosExportar.push(transacoesModificadas[id - 1]);
+            });
+            
+            const blob = new Blob([JSON.stringify(dadosExportar, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'transacoes_selecionadas.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Salvar alterações
+        function salvarAlteracoes() {
+            mostrarLoading(true);
+            
+            fetch('/salvar-normalizacao', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(transacoesModificadas)
+            })
+            .then(response => response.json())
+            .then(data => {
+                mostrarLoading(false);
+                if (data.success) {
+                    mostrarMensagemSucesso('Alterações salvas com sucesso!');
+                } else {
+                    alert('Erro ao salvar: ' + data.message);
+                }
+            })
+            .catch(error => {
+                mostrarLoading(false);
+                alert('Erro ao salvar alterações: ' + error.message);
+            });
+        }
+
+        // Funções utilitárias
+        function mostrarLoading(show) {
+            document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
+        }
+
+        function mostrarMensagemSucesso(mensagem) {
+            // Criar toast de sucesso
+            const toast = document.createElement('div');
+            toast.className = 'toast align-items-center text-white bg-success border-0';
+            toast.setAttribute('role', 'alert');
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">${mensagem}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            `;
+            
+            const container = document.createElement('div');
+            container.className = 'toast-container position-fixed top-0 end-0 p-3';
+            container.appendChild(toast);
+            document.body.appendChild(container);
+            
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+            
+            setTimeout(() => {
+                container.remove();
+            }, 5000);
+        }
+
+        // Editar transação
+        function editarTransacao(id) {
+            const transacao = transacoesModificadas[id - 1];
+            if (!transacao) {
+                alert('Transação não encontrada.');
+                return;
+            }
+
+            // Preencher o formulário
+            document.getElementById('editarTransacaoId').value = id;
+            document.getElementById('editarData').value = transacao.data || '';
+            document.getElementById('editarValor').value = transacao.valor || '';
+            document.getElementById('editarDescricao').value = transacao.descricao || '';
+            document.getElementById('editarCategoria').value = transacao.categoria || '';
+            document.getElementById('editarTipo').value = transacao.tipo || (transacao.is_credito ? 'entrada' : 'saida');
+
+            // Abrir modal
+            const modal = new bootstrap.Modal(document.getElementById('editarTransacaoModal'));
+            modal.show();
+
+            // Focar no primeiro campo após o modal abrir
+            setTimeout(() => {
+                document.getElementById('editarData').focus();
+            }, 500);
+        }
+
+        // Salvar edição da transação
+        function salvarEdicaoTransacao() {
+            const id = parseInt(document.getElementById('editarTransacaoId').value);
+            const data = document.getElementById('editarData').value.trim();
+            const valor = parseFloat(document.getElementById('editarValor').value);
+            const descricao = document.getElementById('editarDescricao').value.trim();
+            const categoria = document.getElementById('editarCategoria').value;
+            const tipo = document.getElementById('editarTipo').value;
+
+            // Validações básicas
+            if (!data || !descricao || isNaN(valor)) {
+                alert('Preencha todos os campos obrigatórios corretamente.');
+                return;
+            }
+
+            // Validar formato da data (DD/MM/YYYY)
+            if (!validarData(data)) {
+                alert('Formato de data inválido. Use o formato DD/MM/YYYY.');
+                return;
+            }
+
+            // Atualizar dados
+            const transacao = transacoesModificadas[id - 1];
+            transacao.data = data;
+            transacao.valor = valor;
+            transacao.descricao = descricao;
+            transacao.categoria = categoria;
+            transacao.tipo = tipo;
+            transacao.is_credito = tipo === 'entrada';
+            transacao.is_debito = tipo === 'saida';
+            transacao.is_categorizado = categoria !== '';
+            transacao.is_pendente = categoria === '';
+            transacao.valor_formatado = `R$ ${valor.toFixed(2).replace('.', ',')}`;
+
+            // Atualizar linha na tabela
+            atualizarLinhaTabela(id);
+
+            // Fechar modal
+            bootstrap.Modal.getInstance(document.getElementById('editarTransacaoModal')).hide();
+
+            // Atualizar estatísticas
+            atualizarEstatisticasVisuais();
+
+            mostrarMensagemSucesso('Transação editada com sucesso!');
+        }
+
+        // Validar formato da data (DD/MM/YYYY)
+        function validarData(data) {
+            const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+            const match = data.match(regex);
+            if (!match) return false;
+
+            const dia = parseInt(match[1]);
+            const mes = parseInt(match[2]);
+            const ano = parseInt(match[3]);
+
+            // Verificar se é uma data válida
+            const dataObj = new Date(ano, mes - 1, dia);
+            return dataObj.getFullYear() === ano &&
+                   dataObj.getMonth() === mes - 1 &&
+                   dataObj.getDate() === dia;
+        }
+
+        // Atualizar linha da tabela após edição
+        function atualizarLinhaTabela(id) {
+            const transacao = transacoesModificadas[id - 1];
+            const row = document.querySelector(`tr[data-id="${id}"]`);
+
+            if (row) {
+                const cells = row.cells;
+
+                // Atualizar células
+                cells[1].textContent = transacao.data;
+                cells[2].textContent = transacao.descricao;
+                cells[3].textContent = transacao.valor_formatado;
+                cells[3].className = `valor-cell ${transacao.is_credito ? 'valor-credito' : 'valor-debito'}`;
+
+                // Atualizar checkboxes
+                cells[4].querySelector('input').checked = transacao.is_credito;
+                cells[5].querySelector('input').checked = transacao.is_debito;
+                cells[6].querySelector('input').checked = transacao.is_categorizado;
+                cells[7].querySelector('input').checked = transacao.is_pendente;
+
+                // Atualizar select de categoria
+                const categoriaSelect = cells[8].querySelector('select');
+                categoriaSelect.value = transacao.categoria;
+            }
+        }
+
+        // Função para adicionar nova categoria
+        function adicionarCategoria() {
+            document.getElementById('novaCategoria').value = '';
+            const modal = new bootstrap.Modal(document.getElementById('adicionarCategoriaModal'));
+            modal.show();
+        }
+
+        // Função para salvar nova categoria
+        function salvarNovaCategoria() {
+            const novaCategoria = document.getElementById('novaCategoria').value.trim().toLowerCase();
+            
+            if (!novaCategoria) {
+                alert('Digite o nome da categoria.');
+                return;
+            }
+
+            // Validar nome da categoria (apenas letras, números, underscores)
+            if (!/^[a-zA-Z0-9_]+$/.test(novaCategoria)) {
+                alert('Nome da categoria deve conter apenas letras, números e underscores.');
+                return;
+            }
+
+            // Verificar se categoria já existe
+            const categoriasExistentes = Array.from(document.querySelectorAll('.categoria-select option')).map(opt => opt.value);
+            if (categoriasExistentes.includes(novaCategoria)) {
+                alert('Esta categoria já existe.');
+                return;
+            }
+
+            // Enviar para o servidor
+            fetch('/adicionar-categoria', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ categoria: novaCategoria })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Fechar modal
+                    bootstrap.Modal.getInstance(document.getElementById('adicionarCategoriaModal')).hide();
+                    
+                    // Recarregar a página para atualizar as categorias
+                    mostrarMensagemSucesso('Categoria adicionada com sucesso!');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    alert('Erro ao adicionar categoria: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao adicionar categoria.');
+            });
+        }
+    </script>
+</body>
+</html>

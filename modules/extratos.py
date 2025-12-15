@@ -109,7 +109,8 @@ class ExtratosModule:
         ],
         'c6': [
             r'C6 BANK', r'C6BANK', r'BANCO C6', r'C6 S\.A',
-            r'www\.c6bank\.com\.br', r'336', r'C6 CONSIGNADO'
+            r'www\.c6bank\.com\.br', r'336', r'C6 CONSIGNADO',
+            r'\bC6\b', r'C6BANK'
         ],
         'next': [
             r'NEXT', r'Banco Next', r'Next',
@@ -201,7 +202,7 @@ Comandos:
                 return await self._confirmar_e_salvar_extrato(user_id)
             elif any(word in text_lower for word in ['revisar', 'editar', 'ajustar', 'no', 'não']):
                 # Redireciona para interface web de revisão
-                return "🔄 Para revisar as categorias, acesse a interface web: http://localhost:5001/revisao-categorias"
+                return "🔄 Para revisar as categorias, acesse a interface web: http://localhost:5501/revisao-categorias"
             elif any(word in text_lower for word in ['cancelar', 'descartar']):
                 self._dados_temp = None
                 return "❌ Processamento cancelado. Os dados foram descartados."

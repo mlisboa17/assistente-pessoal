@@ -240,6 +240,312 @@ def inserir_dados_iniciais():
     conn.close()
     print("✅ Dados iniciais inseridos!")
 
+# ===== FUNÇÕES DE INSERÇÃO =====
+
+def inserir_usuario(nome, email, cpf=None, telefone=None):
+    """Insere um novo usuário no banco de dados."""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO usuarios (nome, email, cpf, telefone)
+            VALUES (?, ?, ?, ?)
+        ''', (nome, email, cpf, telefone))
+
+        usuario_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        return usuario_id, None  # Retorna ID e erro (None se sucesso)
+
+    except sqlite3.IntegrityError as e:
+        return None, f"Erro de integridade: {str(e)}"
+    except Exception as e:
+        return None, str(e)
+
+def buscar_usuarios():
+    """Busca todos os usuários do banco de dados."""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT id, nome, email, cpf, telefone, data_criacao
+            FROM usuarios
+            ORDER BY nome
+        ''')
+
+        usuarios = cursor.fetchall()
+        conn.close()
+
+        # Converte para lista de dicionários
+        usuarios_dict = []
+        for usuario in usuarios:
+            usuarios_dict.append({
+                'id': usuario[0],
+                'nome': usuario[1],
+                'email': usuario[2],
+                'cpf': usuario[3],
+                'telefone': usuario[4],
+                'data_criacao': usuario[5]
+            })
+
+        return usuarios_dict, None
+
+    except Exception as e:
+        return None, str(e)
+
+def buscar_usuario_por_id(usuario_id):
+    """Busca um usuário específico pelo ID."""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT id, nome, email, cpf, telefone, data_criacao
+            FROM usuarios
+            WHERE id = ?
+        ''', (usuario_id,))
+
+        usuario = cursor.fetchone()
+        conn.close()
+
+        if usuario:
+            return {
+                'id': usuario[0],
+                'nome': usuario[1],
+                'email': usuario[2],
+                'cpf': usuario[3],
+                'telefone': usuario[4],
+                'data_criacao': usuario[5]
+            }, None
+        else:
+            return None, "Usuário não encontrado"
+
+    except Exception as e:
+        return None, str(e)
+
+def atualizar_usuario(usuario_id, nome=None, email=None, cpf=None, telefone=None):
+    """Atualiza os dados de um usuário."""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        # Verifica se o usuário existe
+        cursor.execute('SELECT id FROM usuarios WHERE id = ?', (usuario_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return False, "Usuário não encontrado"
+
+        # Monta a query dinamicamente apenas com campos fornecidos
+        campos = []
+        valores = []
+
+        if nome is not None:
+            campos.append('nome = ?')
+            valores.append(nome)
+        if email is not None:
+            campos.append('email = ?')
+            valores.append(email)
+        if cpf is not None:
+            campos.append('cpf = ?')
+            valores.append(cpf)
+        if telefone is not None:
+            campos.append('telefone = ?')
+            valores.append(telefone)
+
+        if not campos:
+            conn.close()
+            return False, "Nenhum campo para atualizar"
+
+        valores.append(usuario_id)  # Para o WHERE
+
+        query = f'UPDATE usuarios SET {", ".join(campos)} WHERE id = ?'
+        cursor.execute(query, valores)
+
+        conn.commit()
+        conn.close()
+
+        return True, None
+
+    except sqlite3.IntegrityError as e:
+        return False, f"Erro de integridade: {str(e)}"
+    except Exception as e:
+        return False, str(e)
+
+def excluir_usuario(usuario_id):
+    """Exclui um usuário do banco de dados."""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        # Verifica se o usuário existe
+        cursor.execute('SELECT id FROM usuarios WHERE id = ?', (usuario_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return False, "Usuário não encontrado"
+
+        # Exclui o usuário
+        cursor.execute('DELETE FROM usuarios WHERE id = ?', (usuario_id,))
+
+        conn.commit()
+        conn.close()
+
+        return True, None
+
+    except Exception as e:
+        return False, str(e)
+
+def inserir_empresa(usuario_id, nome, cnpj=None):
+    """Insere uma nova empresa no banco de dados."""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO empresas (usuario_id, nome, cnpj)
+            VALUES (?, ?, ?)
+        ''', (usuario_id, nome, cnpj))
+
+        empresa_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        return empresa_id, None
+
+    except sqlite3.IntegrityError as e:
+        return None, f"Erro de integridade: {str(e)}"
+    except Exception as e:
+        return None, str(e)
+
+def inserir_banco(nome, codigo=None):
+    """Insere um novo banco no banco de dados."""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO bancos (nome, codigo)
+            VALUES (?, ?)
+        ''', (nome, codigo))
+
+        banco_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        return banco_id, None
+
+    except sqlite3.IntegrityError as e:
+        return None, f"Erro de integridade: {str(e)}"
+    except Exception as e:
+        return None, str(e)
+
+def inserir_conta_bancaria(banco_id, usuario_id, nome, agencia=None, conta=None, tipo='corrente'):
+    """Insere uma nova conta bancária no banco de dados."""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO contas_bancarias (banco_id, usuario_id, nome, agencia, conta, tipo)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (banco_id, usuario_id, nome, agencia, conta, tipo))
+
+        conta_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        return conta_id, None
+
+    except Exception as e:
+        return None, str(e)
+
+def inserir_cartao_credito(conta_id, nome, limite=None, vencimento=None):
+    """Insere um novo cartão de crédito no banco de dados."""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO cartoes_credito (conta_bancaria_id, nome, limite, vencimento)
+            VALUES (?, ?, ?, ?)
+        ''', (conta_id, nome, limite, vencimento))
+
+        cartao_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        return cartao_id, None
+
+    except Exception as e:
+        return None, str(e)
+
+def inserir_contato(usuario_id, nome, tipo='cliente', telefone=None, email=None):
+    """Insere um novo contato (cliente/fornecedor) no banco de dados."""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO contatos (usuario_id, nome, tipo, telefone, email)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (usuario_id, nome, tipo, telefone, email))
+
+        contato_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        return contato_id, None
+
+    except Exception as e:
+        return None, str(e)
+
+def inserir_categoria(nome, tipo, empresa_id=None, cor=None, icone=None):
+    """Insere uma nova categoria no banco de dados."""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO categorias (nome, tipo, empresa_id, cor, icone)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (nome, tipo, empresa_id, cor, icone))
+
+        categoria_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        return categoria_id, None
+
+    except sqlite3.IntegrityError as e:
+        return None, f"Erro de integridade: {str(e)}"
+    except Exception as e:
+        return None, str(e)
+
+def inserir_transacao(data, tipo, valor, descricao=None, categoria_id=None, conta_bancaria_id=None,
+                     cartao_credito_id=None, contato_id=None, empresa_id=None, fonte='manual'):
+    """Insere uma nova transação no banco de dados."""
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO transacoes (data, tipo, valor, descricao, categoria_id, conta_bancaria_id,
+                                  cartao_credito_id, contato_id, empresa_id, fonte)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (data, tipo, valor, descricao, categoria_id, conta_bancaria_id,
+              cartao_credito_id, contato_id, empresa_id, fonte))
+
+        transacao_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        return transacao_id, None
+
+    except Exception as e:
+        return None, str(e)
+
 def migrar_transacoes_json():
     """Migra transações do JSON para o banco."""
     json_path = 'data/transacoes.json'

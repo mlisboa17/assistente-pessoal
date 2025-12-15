@@ -249,7 +249,7 @@ def mostrar_analise_detalhada(extrato):
     # Tentar abrir o navegador automaticamente
     try:
         import webbrowser
-        webbrowser.open('http://localhost:5001/revisao-categorias')
+        webbrowser.open('http://localhost:5501/revisao-categorias')
         print("✅ Navegador aberto automaticamente!")
     except:
         print("ℹ️ Abra o navegador manualmente no endereço acima")

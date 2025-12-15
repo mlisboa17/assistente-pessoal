@@ -137,7 +137,7 @@ echo.
 echo Para iniciar o servidor:
 echo   python api_server.py
 echo.
-echo Acesse: http://localhost:5001
+echo Acesse: http://localhost:5501
 echo.
 echo Para testar as bibliotecas:
 echo   python teste_bibliotecas.py

@@ -15,7 +15,7 @@ const path = require('path');
 const logger = pino({ level: 'silent' });
 
 // URL do servidor Python (vamos criar)
-const PYTHON_SERVER = 'http://localhost:5001';
+const PYTHON_SERVER = 'http://localhost:5501';
 
 // Pasta para salvar sessão
 const AUTH_FOLDER = './auth_info';

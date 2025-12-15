@@ -5,8 +5,10 @@ Conecta o bot Node.js ao Assistente Python
 import os
 import sys
 import json
+import shutil
 from flask import Flask, request, jsonify, render_template
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
 # Adiciona path do projeto
 sys.path.insert(0, os.path.dirname(__file__))
@@ -14,6 +16,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from middleware.orchestrator import Orchestrator
 from modules.extratos import ExtratosModule
 from modules.financas import FinancasModule
+import database_setup as db
 
 load_dotenv()
 
@@ -203,6 +206,27 @@ def revisao_categorias():
                 {'data': '05/12/2025', 'descricao': 'PAGAMENTO ALUGUEL', 'valor': 1200.00, 'tipo': 'debito', 'categoria': 'sem_categoria'}
             ]
 
+        # Filtrar por data (padrão: últimos 30 dias)
+        data_inicio_param = request.args.get('data_inicio')
+        data_fim_param = request.args.get('data_fim')
+        
+        if data_inicio_param and data_fim_param:
+            # Converter de YYYY-MM-DD para DD/MM/YYYY para comparação
+            data_inicio_dt = datetime.strptime(data_inicio_param, '%Y-%m-%d')
+            data_fim_dt = datetime.strptime(data_fim_param, '%Y-%m-%d')
+            data_inicio_str = data_inicio_dt.strftime('%d/%m/%Y')
+            data_fim_str = data_fim_dt.strftime('%d/%m/%Y')
+            transacoes = [t for t in transacoes if data_inicio_str <= t['data'] <= data_fim_str]
+        else:
+            # Padrão: últimos 2 dias
+            hoje = datetime.now()
+            inicio = hoje - timedelta(days=2)
+            data_inicio_str = inicio.strftime('%d/%m/%Y')
+            data_fim_str = hoje.strftime('%d/%m/%Y')
+            transacoes = [t for t in transacoes if data_inicio_str <= t['data'] <= data_fim_str]
+            data_inicio_param = inicio.strftime('%Y-%m-%d')
+            data_fim_param = hoje.strftime('%Y-%m-%d')
+
         # Extrair bancos únicos das transações
         bancos = set()
         for t in transacoes:
@@ -246,7 +270,9 @@ def revisao_categorias():
                              categorias_disponiveis=categorias_disponiveis,
                              bancos_disponiveis=bancos_disponiveis,
                              categorizadas=categorizadas,
-                             nao_categorizadas=nao_categorizadas)
+                             nao_categorizadas=nao_categorizadas,
+                             data_inicio=data_inicio_param,
+                             data_fim=data_fim_param)
 
     except Exception as e:
         return f"Erro na revisão de categorias: {str(e)}"
@@ -296,6 +322,219 @@ def revisao_assistente():
 
     except Exception as e:
         return f"Erro na revisão assistida: {str(e)}"
+
+@app.route('/planilha-normalizacao', methods=['GET'])
+def planilha_normalizacao():
+    """Página de normalização em formato de planilha com checkboxes e operações em lote"""
+    try:
+        # Carregar dados reais de transacoes.json
+        transacoes_path = os.path.join(os.path.dirname(__file__), 'data', 'transacoes.json')
+        if os.path.exists(transacoes_path):
+            with open(transacoes_path, 'r', encoding='utf-8') as f:
+                transacoes = json.load(f)
+        else:
+            # Fallback para dados de teste
+            transacoes = [
+                {'data': '01/12/2025', 'descricao': 'PIX RECEBIDO SALARIO EMPRESA', 'valor': 3500.00, 'tipo': 'entrada', 'categoria': 'salario'},
+                {'data': '02/12/2025', 'descricao': 'BOLETO PAGO ENERGIA', 'valor': 180.00, 'tipo': 'entrada', 'categoria': 'servicos'},
+                {'data': '03/12/2025', 'descricao': 'PIX ENVIADO POSTO COMBUSTIVEL', 'valor': 150.00, 'tipo': 'entrada', 'categoria': 'combustivel'},
+                {'data': '04/12/2025', 'descricao': 'RECEBIMENTO FREELANCE', 'valor': 800.00, 'tipo': 'entrada', 'categoria': 'freelance'},
+                {'data': '05/12/2025', 'descricao': 'PAGAMENTO ALUGUEL', 'valor': 1200.00, 'tipo': 'entrada', 'categoria': 'sem_categoria'}
+            ]
+
+        # Filtrar por data (padrão: últimos 2 dias)
+        data_inicio_param = request.args.get('data_inicio')
+        data_fim_param = request.args.get('data_fim')
+        
+        if data_inicio_param and data_fim_param:
+            # Converter de YYYY-MM-DD para DD/MM/YYYY para comparação
+            data_inicio_dt = datetime.strptime(data_inicio_param, '%Y-%m-%d')
+            data_fim_dt = datetime.strptime(data_fim_param, '%Y-%m-%d')
+            data_inicio_str = data_inicio_dt.strftime('%d/%m/%Y')
+            data_fim_str = data_fim_dt.strftime('%d/%m/%Y')
+            transacoes = [t for t in transacoes if data_inicio_str <= t['data'] <= data_fim_str]
+        else:
+            # Padrão: últimos 2 dias
+            hoje = datetime.now()
+            inicio = hoje - timedelta(days=2)
+            data_inicio_str = inicio.strftime('%d/%m/%Y')
+            data_fim_str = hoje.strftime('%d/%m/%Y')
+            transacoes = [t for t in transacoes if data_inicio_str <= t['data'] <= data_fim_str]
+            data_inicio_param = inicio.strftime('%Y-%m-%d')
+            data_fim_param = hoje.strftime('%Y-%m-%d')
+
+        # Preparar dados para planilha - converter tipos booleanos
+        for transacao in transacoes:
+            # Melhorar lógica de detecção de crédito/débito baseada na descrição e valor
+            descricao = transacao.get('descricao', '').upper()
+            tipo = transacao.get('tipo', '').lower()
+            valor = transacao.get('valor', 0)
+
+            # Palavras-chave que indicam entrada (crédito)
+            entrada_keywords = [
+                'ENTRADA', 'PIX RECEBIDO', 'RECEBIDO', 'CREDITO', 'CRÉDITO',
+                'DEPÓSITO', 'DEPOSITO', 'TRANSFERÊNCIA RECEBIDA', 'TRANSFERENCIA RECEBIDA',
+                'PAGAMENTO RECEBIDO', 'SALÁRIO', 'SALARIO', 'FREELANCE'
+            ]
+
+            # Palavras-chave que indicam saída (débito)
+            saida_keywords = [
+                'SAÍDA', 'SAIDA', 'PIX ENVIADO', 'ENVIADO', 'DÉBITO', 'DEBITO',
+                'PAGAMENTO', 'COMPRA', 'GASTO', 'DESPESA', 'TRANSFERÊNCIA ENVIADA',
+                'TRANSFERENCIA ENVIADA', 'BOLETO', 'CONTA', 'ALUGUEL', 'LUZ', 'ÁGUA', 'AGUA'
+            ]
+
+            # Verificar se é entrada baseada em palavras-chave na descrição
+            is_entrada_descricao = any(keyword in descricao for keyword in entrada_keywords)
+            is_saida_descricao = any(keyword in descricao for keyword in saida_keywords)
+
+            # Lógica de decisão:
+            # 1. Se tipo é explicitamente 'saida', é débito
+            # 2. Se descrição indica saída, é débito
+            # 3. Se valor é negativo, é débito
+            # 4. Caso contrário, assume crédito
+            is_debito = (
+                tipo == 'saida' or
+                is_saida_descricao or
+                (valor < 0) or
+                ('PIX ENVIADO' in descricao) or
+                ('ENVIADO' in descricao and 'PIX' in descricao)
+            )
+
+            transacao['is_credito'] = not is_debito
+            transacao['is_debito'] = is_debito
+            transacao['is_categorizado'] = transacao.get('categoria', '') not in ['', 'sem_categoria']
+            transacao['is_pendente'] = not transacao['is_categorizado']
+            transacao['valor_formatado'] = f"R$ {transacao['valor']:.2f}".replace('.', ',')
+
+        # Extrair bancos únicos
+        bancos = set()
+        for t in transacoes:
+            desc = t.get('descricao', '')
+            if ': ' in desc:
+                banco_part = desc.split(': ')[0]
+                bancos.add(banco_part)
+        
+        # Adicionar bancos suportados que podem não ter transações ainda
+        bancos_suportados = [
+            'BANCO_DO_BRASIL', 'ITAÚ', 'C6', 'SANTANDER', 'BRADESCO', 
+            'NUBANK', 'INTER', 'ORIGINAL', 'PAN', 'BMG'
+        ]
+        for banco in bancos_suportados:
+            bancos.add(banco)
+        
+        # Padronizar nomes dos bancos
+        bancos_padronizados = set()
+        for banco in bancos:
+            if banco == 'ITAÚ':
+                bancos_padronizados.add('ITAÚ')
+            elif banco == 'ITAU':
+                bancos_padronizados.add('ITAÚ')
+            else:
+                bancos_padronizados.add(banco)
+        
+        bancos_disponiveis = sorted(list(bancos_padronizados))
+
+        # Carregar categorias do arquivo ou usar padrão
+        categorias_path = os.path.join(os.path.dirname(__file__), 'data', 'categorias.json')
+        if os.path.exists(categorias_path):
+            with open(categorias_path, 'r', encoding='utf-8') as f:
+                categorias_disponiveis = json.load(f)
+        else:
+            categorias_disponiveis = [
+                'alimentacao', 'transporte', 'combustivel', 'saude', 'educacao',
+                'assinaturas', 'lazer', 'compras', 'servicos', 'impostos',
+                'investimentos', 'transferencias', 'salario', 'freelance', 'outros'
+            ]
+
+        return render_template('planilha_normalizacao.html',
+                             transacoes=transacoes,
+                             categorias_disponiveis=categorias_disponiveis,
+                             bancos_disponiveis=bancos_disponiveis,
+                             data_inicio=data_inicio_param,
+                             data_fim=data_fim_param)
+
+    except Exception as e:
+        return f"Erro na planilha de normalização: {str(e)}"
+
+@app.route('/salvar-normalizacao', methods=['POST'])
+def salvar_normalizacao():
+    """Salva as alterações da planilha de normalização"""
+    try:
+        dados = request.get_json()
+        
+        if not dados:
+            return jsonify({'success': False, 'message': 'Dados não fornecidos'}), 400
+        
+        # Validar estrutura dos dados
+        if not isinstance(dados, list):
+            return jsonify({'success': False, 'message': 'Formato de dados inválido'}), 400
+        
+        # Caminho para o arquivo de transações
+        transacoes_path = os.path.join(os.path.dirname(__file__), 'data', 'transacoes.json')
+        
+        # Fazer backup do arquivo original
+        if os.path.exists(transacoes_path):
+            backup_path = transacoes_path + '.backup'
+            shutil.copy2(transacoes_path, backup_path)
+        
+        # Salvar os novos dados
+        with open(transacoes_path, 'w', encoding='utf-8') as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({'success': True, 'message': 'Alterações salvas com sucesso'})
+    
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Erro ao salvar: {str(e)}'}), 500
+
+@app.route('/adicionar-categoria', methods=['POST'])
+def adicionar_categoria():
+    """Adiciona uma nova categoria à lista de categorias disponíveis"""
+    try:
+        dados = request.get_json()
+        
+        if not dados or 'categoria' not in dados:
+            return jsonify({'success': False, 'message': 'Nome da categoria não fornecido'}), 400
+        
+        nova_categoria = dados['categoria'].strip().lower()
+        
+        # Validar nome da categoria
+        if not nova_categoria:
+            return jsonify({'success': False, 'message': 'Nome da categoria não pode estar vazio'}), 400
+        
+        # Validar formato (apenas letras, números, underscores)
+        if not re.match(r'^[a-zA-Z0-9_]+$', nova_categoria):
+            return jsonify({'success': False, 'message': 'Nome da categoria deve conter apenas letras, números e underscores'}), 400
+        
+        # Caminho para o arquivo de categorias
+        categorias_path = os.path.join(os.path.dirname(__file__), 'data', 'categorias.json')
+        
+        # Carregar categorias existentes ou criar lista padrão
+        if os.path.exists(categorias_path):
+            with open(categorias_path, 'r', encoding='utf-8') as f:
+                categorias = json.load(f)
+        else:
+            categorias = [
+                'alimentacao', 'transporte', 'combustivel', 'saude', 'educacao',
+                'assinaturas', 'lazer', 'compras', 'servicos', 'impostos',
+                'investimentos', 'transferencias', 'salario', 'freelance', 'outros'
+            ]
+        
+        # Verificar se categoria já existe
+        if nova_categoria in categorias:
+            return jsonify({'success': False, 'message': 'Esta categoria já existe'}), 400
+        
+        # Adicionar nova categoria
+        categorias.append(nova_categoria)
+        
+        # Salvar arquivo
+        with open(categorias_path, 'w', encoding='utf-8') as f:
+            json.dump(categorias, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({'success': True, 'message': 'Categoria adicionada com sucesso'})
+    
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Erro ao adicionar categoria: {str(e)}'}), 500
 
 @app.route('/transacoes', methods=['GET'])
 def listar_transacoes():
@@ -603,8 +842,78 @@ def api_criar_usuario():
         if not nome or not email:
             return jsonify({'success': False, 'error': 'Nome e email são obrigatórios'}), 400
 
-        # TODO: Implementar inserção no banco
-        return jsonify({'success': True, 'message': 'Usuário criado com sucesso'})
+        # Verificar se o banco está configurado
+        db.criar_tabelas()
+
+        # Inserir usuário no banco
+        usuario_id, erro = db.inserir_usuario(nome, email, cpf, telefone)
+
+        if erro:
+            return jsonify({'success': False, 'error': erro}), 400
+
+        return jsonify({'success': True, 'message': 'Usuário criado com sucesso', 'usuario_id': usuario_id})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/usuarios', methods=['GET'])
+def api_listar_usuarios():
+    """API para listar todos os usuários"""
+    try:
+        usuarios, erro = db.buscar_usuarios()
+
+        if erro:
+            return jsonify({'success': False, 'error': erro}), 500
+
+        return jsonify({'success': True, 'usuarios': usuarios})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/usuarios/<int:usuario_id>', methods=['GET'])
+def api_obter_usuario(usuario_id):
+    """API para obter um usuário específico"""
+    try:
+        usuario, erro = db.buscar_usuario_por_id(usuario_id)
+
+        if erro:
+            return jsonify({'success': False, 'error': erro}), 404
+
+        return jsonify({'success': True, 'usuario': usuario})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/usuarios/<int:usuario_id>', methods=['PUT'])
+def api_atualizar_usuario(usuario_id):
+    """API para atualizar um usuário"""
+    try:
+        data = request.json
+        nome = data.get('nome')
+        email = data.get('email')
+        cpf = data.get('cpf')
+        telefone = data.get('telefone')
+
+        sucesso, erro = db.atualizar_usuario(usuario_id, nome, email, cpf, telefone)
+
+        if not sucesso:
+            return jsonify({'success': False, 'error': erro}), 400
+
+        return jsonify({'success': True, 'message': 'Usuário atualizado com sucesso'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/usuarios/<int:usuario_id>', methods=['DELETE'])
+def api_excluir_usuario(usuario_id):
+    """API para excluir um usuário"""
+    try:
+        sucesso, erro = db.excluir_usuario(usuario_id)
+
+        if not sucesso:
+            return jsonify({'success': False, 'error': erro}), 400
+
+        return jsonify({'success': True, 'message': 'Usuário excluído com sucesso'})
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -621,8 +930,19 @@ def api_criar_empresa():
         if not nome or not cnpj:
             return jsonify({'success': False, 'error': 'Nome e CNPJ são obrigatórios'}), 400
 
-        # TODO: Implementar inserção no banco
-        return jsonify({'success': True, 'message': 'Empresa criada com sucesso'})
+        if not usuario_id:
+            return jsonify({'success': False, 'error': 'ID do usuário é obrigatório'}), 400
+
+        # Verificar se o banco está configurado
+        db.criar_tabelas()
+
+        # Inserir empresa no banco
+        empresa_id, erro = db.inserir_empresa(usuario_id, nome, cnpj)
+
+        if erro:
+            return jsonify({'success': False, 'error': erro}), 400
+
+        return jsonify({'success': True, 'message': 'Empresa criada com sucesso', 'empresa_id': empresa_id})
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -642,8 +962,24 @@ def api_criar_conta():
         if not banco_id or not conta_corrente or not tipo_conta:
             return jsonify({'success': False, 'error': 'Banco, conta corrente e tipo são obrigatórios'}), 400
 
-        # TODO: Implementar inserção no banco
-        return jsonify({'success': True, 'message': 'Conta criada com sucesso'})
+        if not usuario_id:
+            return jsonify({'success': False, 'error': 'ID do usuário é obrigatório'}), 400
+
+        # Verificar se o banco está configurado
+        db.criar_tabelas()
+
+        # Criar nome da conta baseado nos dados
+        nome_conta = f"{tipo_conta.title()} - {conta_corrente}"
+        if agencia:
+            nome_conta = f"{tipo_conta.title()} - Ag: {agencia} CC: {conta_corrente}"
+
+        # Inserir conta no banco
+        conta_id, erro = db.inserir_conta_bancaria(banco_id, usuario_id, nome_conta, agencia, conta_corrente, tipo_conta)
+
+        if erro:
+            return jsonify({'success': False, 'error': erro}), 400
+
+        return jsonify({'success': True, 'message': 'Conta criada com sucesso', 'conta_id': conta_id})
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -672,8 +1008,23 @@ def api_criar_cartao():
         if not usuario_id and not empresa_id:
             return jsonify({'success': False, 'error': 'Selecione um titular (usuário ou empresa)'}), 400
 
-        # TODO: Implementar inserção no banco
-        return jsonify({'success': True, 'message': 'Cartão criado com sucesso'})
+        # Verificar se o banco está configurado
+        db.criar_tabelas()
+
+        # Primeiro criar uma conta bancária para o cartão se necessário
+        # Por enquanto, vamos assumir que o cartão está associado a uma conta existente
+        # TODO: Melhorar lógica para associar cartão a conta bancária
+
+        # Criar nome do cartão
+        nome_cartao = f"{bandeira} ****{ultimos_4_digitos}" if bandeira else f"Cartão ****{ultimos_4_digitos}"
+
+        # Por enquanto, vamos criar sem conta_id (None) - precisa ser ajustado
+        cartao_id, erro = db.inserir_cartao_credito(None, nome_cartao, limite, f"{dia_vencimento:02d}")
+
+        if erro:
+            return jsonify({'success': False, 'error': erro}), 400
+
+        return jsonify({'success': True, 'message': 'Cartão criado com sucesso', 'cartao_id': cartao_id})
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -700,20 +1051,33 @@ def api_criar_contato():
         if not nome or not tipo_pessoa or not categoria:
             return jsonify({'success': False, 'error': 'Nome, tipo de pessoa e categoria são obrigatórios'}), 400
 
-        # TODO: Implementar inserção no banco
-        return jsonify({'success': True, 'message': 'Contato criado com sucesso'})
+        # Verificar se o banco está configurado
+        db.criar_tabelas()
+
+        # Usar categoria como tipo (cliente/fornecedor)
+        tipo_contato = categoria.lower() if categoria else 'cliente'
+
+        # Por enquanto, vamos usar usuario_id = 1 (usuário padrão)
+        # TODO: Implementar sistema de autenticação para obter usuario_id correto
+        usuario_id = 1
+
+        # Inserir contato no banco
+        contato_id, erro = db.inserir_contato(usuario_id, nome, tipo_contato, telefone, email)
+
+        if erro:
+            return jsonify({'success': False, 'error': erro}), 400
+
+        return jsonify({'success': True, 'message': 'Contato criado com sucesso', 'contato_id': contato_id})
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("""
-╔══════════════════════════════════════════════════╗
-║     🌐 API SERVER - ASSISTENTE PESSOAL          ║
-║                                                  ║
-║  Web Interface: http://localhost:5001           ║
-║  API Endpoint: POST /process                    ║
-║  Dashboard: http://localhost:5001/              ║
-╚══════════════════════════════════════════════════╝
+API SERVER - ASSISTENTE PESSOAL
+
+  Web Interface: http://localhost:5501
+  API Endpoint: POST /process
+  Dashboard: http://localhost:5501/
     """)
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=5501, debug=False)

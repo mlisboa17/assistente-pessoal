@@ -86,11 +86,11 @@ pip install PyMuPDF "camelot-py[cv]" tabula-py ofxparse
 python api_server.py
 
 # Acesse no navegador
-# http://localhost:5001
+# http://localhost:5501
 ```
 
 ### Primeiro Uso
-1. **Acesse** http://localhost:5001/cadastros
+1. **Acesse** http://localhost:5501/cadastros
 2. **Cadastre usuários** e empresas
 3. **Configure contas bancárias**
 4. **Faça upload** dos extratos em PDF
@@ -254,7 +254,7 @@ python main.py
 
 # Interface Web (opcional)
 python api_server.py
-# Acesse: http://localhost:5001
+# Acesse: http://localhost:5501
 ```
 
 ## 🌐 Interface Web
@@ -269,7 +269,7 @@ O assistente possui uma interface web amigável para visualizar dados e fazer up
 
 ### Como usar
 1. Execute o servidor web: `python api_server.py`
-2. Abra o navegador em `http://localhost:5001`
+2. Abra o navegador em `http://localhost:5501`
 3. Navegue pelas seções usando o menu lateral
 4. Faça upload de extratos PDFs/TXT diretamente pela interface
 
@@ -298,7 +298,7 @@ python seletor_arquivos.py
 
 # Via interface web
 python api_server.py
-# Acesse: http://localhost:5001/upload-extrato
+# Acesse: http://localhost:5501/upload-extrato
 ```
 
 ### Processo de Revisão de Categorias

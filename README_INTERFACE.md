@@ -66,7 +66,7 @@ A interface web do Assistente Pessoal oferece uma experiência bonita e intuitiv
 
 ### 1. Acessar o Dashboard
 ```
-http://localhost:5001/
+http://localhost:5501/
 ```
 
 ### 2. Upload de Extrato
@@ -115,10 +115,10 @@ python api_server.py
 ```
 
 ### Acessar a Interface
-- **URL**: http://localhost:5001
-- **Dashboard**: http://localhost:5001/
-- **Revisão**: http://localhost:5001/revisao-categorias
-- **Upload**: http://localhost:5001/upload-extrato
+- **URL**: http://localhost:5501
+- **Dashboard**: http://localhost:5501/
+- **Revisão**: http://localhost:5501/revisao-categorias
+- **Upload**: http://localhost:5501/upload-extrato
 
 ### Estrutura de Arquivos
 ```

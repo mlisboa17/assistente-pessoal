@@ -123,52 +123,104 @@
     </div>
 </div>
 
+<!-- Modal Editar Usuário -->
+<div class="modal fade" id="modalEditarUsuario" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-user-edit me-2"></i>Editar Usuário PF
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formEditarUsuario">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editNome" class="form-label">Nome Completo *</label>
+                            <input type="text" class="form-control" id="editNome" name="nome" required>
+                            <div class="form-text">Nome completo da pessoa física</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editEmail" class="form-label">Email *</label>
+                            <input type="email" class="form-control" id="editEmail" name="email" required>
+                            <div class="form-text">Email principal para contato</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editCpf" class="form-label">CPF</label>
+                            <input type="text" class="form-control" id="editCpf" name="cpf" placeholder="000.000.000-00">
+                            <div class="form-text">CPF da pessoa física</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editTelefone" class="form-label">Telefone</label>
+                            <input type="tel" class="form-control" id="editTelefone" name="telefone" placeholder="(00) 00000-0000">
+                            <div class="form-text">Telefone para contato</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Atualizar Usuário
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 // Carregar usuários
 async function carregarUsuarios() {
     try {
-        // TODO: Implementar carregamento via API
-        const usuarios = []; // Dados mockados por enquanto
+        const response = await fetch('/api/usuarios');
+        const result = await response.json();
 
-        const tbody = document.querySelector('#tabelaUsuarios tbody');
-        tbody.innerHTML = '';
+        if (result.success) {
+            const usuarios = result.usuarios;
+            const tbody = document.querySelector('#tabelaUsuarios tbody');
+            tbody.innerHTML = '';
 
-        if (usuarios.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="6" class="text-center text-muted py-4">
-                        <i class="fas fa-users fa-2x mb-3"></i>
-                        <br>Nenhum usuário cadastrado ainda
-                        <br><small>Clique em "Novo Usuário" para começar</small>
-                    </td>
-                </tr>
-            `;
-        } else {
-            usuarios.forEach(usuario => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${usuario.nome}</td>
-                    <td>${usuario.email}</td>
-                    <td>${usuario.cpf || '-'}</td>
-                    <td>${usuario.telefone || '-'}</td>
-                    <td>${usuario.data_criacao}</td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-primary me-1" onclick="editarUsuario(${usuario.id})">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="excluirUsuario(${usuario.id})">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
+            if (usuarios.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            <i class="fas fa-users fa-2x mb-3"></i>
+                            <br>Nenhum usuário cadastrado ainda
+                            <br><small>Clique em "Novo Usuário" para começar</small>
+                        </td>
+                    </tr>
                 `;
-                tbody.appendChild(tr);
-            });
+            } else {
+                usuarios.forEach(usuario => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${usuario.nome}</td>
+                        <td>${usuario.email}</td>
+                        <td>${usuario.cpf || '-'}</td>
+                        <td>${usuario.telefone || '-'}</td>
+                        <td>${new Date(usuario.data_criacao).toLocaleDateString('pt-BR')}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary me-1" onclick="editarUsuario(${usuario.id})" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="excluirUsuario(${usuario.id})" title="Excluir">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            document.getElementById('totalUsuarios').textContent = usuarios.length;
+        } else {
+            console.error('Erro ao carregar usuários:', result.error);
+            alert('Erro ao carregar usuários: ' + result.error);
         }
-
-        document.getElementById('totalUsuarios').textContent = usuarios.length;
-
     } catch (error) {
         console.error('Erro ao carregar usuários:', error);
+        alert('Erro ao carregar usuários');
     }
 }
 
@@ -204,14 +256,55 @@ document.getElementById('formNovoUsuario').addEventListener('submit', async func
     }
 });
 
-// Funções de edição e exclusão (placeholders)
+// Funções de edição e exclusão
 function editarUsuario(id) {
-    alert('Função de edição será implementada');
+    // Buscar dados do usuário
+    fetch(`/api/usuarios/${id}`)
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                const usuario = result.usuario;
+
+                // Preencher modal de edição
+                document.getElementById('editNome').value = usuario.nome || '';
+                document.getElementById('editEmail').value = usuario.email || '';
+                document.getElementById('editCpf').value = usuario.cpf || '';
+                document.getElementById('editTelefone').value = usuario.telefone || '';
+
+                // Guardar ID do usuário sendo editado
+                document.getElementById('formEditarUsuario').dataset.usuarioId = id;
+
+                // Mostrar modal
+                const modal = new bootstrap.Modal(document.getElementById('modalEditarUsuario'));
+                modal.show();
+            } else {
+                alert('Erro ao buscar dados do usuário: ' + result.error);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao buscar dados do usuário');
+        });
 }
 
 function excluirUsuario(id) {
-    if (confirm('Tem certeza que deseja excluir este usuário?')) {
-        alert('Função de exclusão será implementada');
+    if (confirm('Tem certeza que deseja excluir este usuário? Esta ação não pode ser desfeita.')) {
+        fetch(`/api/usuarios/${id}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('Usuário excluído com sucesso!');
+                carregarUsuarios(); // Recarregar lista
+            } else {
+                alert('Erro ao excluir usuário: ' + result.error);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao excluir usuário');
+        });
     }
 }
 

@@ -168,11 +168,11 @@
                         <td class="fw-bold">{{ ((page - 1) * per_page) + loop.index }}</td>
                         <td>{{ transacao.data }}</td>
                         <td>
-                            {% if transacao.tipo == 'entrada' %}
-                                <span class="badge bg-success">💚 Entrada</span>
-                            {% else %}
-                                <span class="badge bg-danger">❤️ Saída</span>
-                            {% endif %}
+                                {% if transacao.tipo == 'entrada' %}
+                                <span class="badge bg-success">Entrada</span>
+                                {% else %}
+                                <span class="badge bg-danger">Saída</span>
+                                {% endif %}
                         </td>
                         <td>
                             <div class="fw-bold">{{ transacao.descricao[:60] }}</div>
