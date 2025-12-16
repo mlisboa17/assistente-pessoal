@@ -237,7 +237,11 @@
                         <td>{{ transacao.data }}</td>
                         <td>{{ transacao.descricao }}</td>
                         <td class="valor-cell {{ 'valor-credito' if transacao.is_credito else 'valor-debito' }}">
-                            {{ transacao.valor_formatado }}
+                            {% if transacao.is_debito %}
+                                {{ ('R$ ' + ('{:.2f}'.format(transacao.valor if transacao.valor >= 0 else -transacao.valor)).replace('.', ',')) }}
+                            {% else %}
+                                {{ transacao.valor_formatado }}
+                            {% endif %}
                         </td>
                         <td class="checkbox-cell">
                             <input type="checkbox" class="form-check-input" 
@@ -701,7 +705,13 @@
                 // Atualizar células
                 cells[1].textContent = transacao.data;
                 cells[2].textContent = transacao.descricao;
-                cells[3].textContent = transacao.valor_formatado;
+                // Exibir valor formatado; para débitos usamos o valor absoluto
+                if (transacao.is_debito) {
+                    const absVal = Math.abs(Number(transacao.valor) || 0);
+                    cells[3].textContent = `R$ ${absVal.toFixed(2).replace('.', ',')}`;
+                } else {
+                    cells[3].textContent = transacao.valor_formatado;
+                }
                 cells[3].className = `valor-cell ${transacao.is_credito ? 'valor-credito' : 'valor-debito'}`;
 
                 // Atualizar checkboxes
